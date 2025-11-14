@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://www.gstatic.com https://unpkg.com; connect-src 'self' https://firestore.googleapis.com https://www.googleapis.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https://*.tile.openstreetmap.org; font-src 'self';" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Trash2Cash — Company</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <header class="topbar">
+    <div class="brand">TRASH 2 CASH — Company</div>
+    <a class="smalllink" href="index.html">Logout</a>
+  </header>
+
+  <main class="page-area">
+
+    <section class="card">
+      <h3>Select Company</h3>
+      <label>Company:
+        <select id="co-list"></select>
+      </label>
+    </section>
+
+    <section class="card">
+      <h3>Open Lots</h3>
+      <div id="lots">Loading...</div>
+    </section>
+
+    <section class="card">
+      <h3>Your Bids</h3>
+      <div id="my-bids">Loading...</div>
+    </section>
+
+  </main>
+
+  <script type="module">
+    import { seedIfEmpty, getDocsFromCol, onRealtimeCollection, updateDocField } from "./common.js";
+
+    await seedIfEmpty();
+
+    // Load company list
+    const select = document.getElementById("co-list");
+    const companies = await getDocsFromCol("companies");
+    companies.forEach(c => {
+      const opt = document.createElement("option");
+      opt.value = c.id;
+      opt.textContent = `${c.id} (${c.name})`;
+      select.appendChild(opt);
+    });
+
+    select.onchange = () => {
+      renderLots();
+      renderMyBids();
+    };
+
+    // Listen to realtime LOT changes
+    onRealtimeCollection("lots", snap => {
+      window.__LOTS = {};
+      snap.forEach(doc => window.__LOTS[doc.id] = doc);
+      renderLots();
+      renderMyBids();
+    });
+
+    function renderLots() {
+      const cont = document.getElementById("lots");
+      const lots = Object.values(window.__LOTS || {});
+
+      cont.innerHTML =
+        lots.map(l => `
+        <div class="list-item">
+          <b>${l.id}</b> — ${l.type}<br>
+          ${l.weight || 0}kg / ${l.target || 500}kg — ${l.isFull ? "<b>FULL</b>" : "Open"}
+          <div style="margin-top:8px">
+            <input placeholder="₹ price" id="bid-${l.id}" style="width:90px" />
+            <button class="primary" onclick="placeBid('${l.id}')">Bid</button>
+          </div>
+        </div>
+        `).join("") || "<div>No lots available</div>";
+    }
+
+    function renderMyBids() {
+      const mine = [];
+      for (const [id, l] of Object.entries(window.__LOTS || {})) {
+        (l.bids || []).forEach(b => {
+          if (b.company === select.value) {
+            mine.push({ id, price: b.price, at: b.at });
+          }
+        });
+      }
+
+      document.getElementById("my-bids").innerHTML =
+        mine.map(m => `
+          <div class="list-item">
+            <b>${m.id}</b> — ₹${m.price} <br><span class="small">${m.at}</span>
+          </div>
+        `).join("") || "<div>No bids placed</div>";
+    }
+
+    window.placeBid = async (lotId) => {
+      const input = document.getElementById("bid-" + lotId);
+      const price = parseFloat(input.value);
+      if (!price) return alert("Enter bid amount");
+
+      await updateDocField("lots", lotId, data => {
+        const bids = data.bids || [];
+        bids.push({
+          company: select.value,
+          price,
+          at: new Date().toISOString()
+        });
+        data.bids = bids;
+        return data;
+      });
+
+      alert("Bid placed!");
+    };
+  </script>
+
+</body>
+</html>

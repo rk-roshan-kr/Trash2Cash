@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://www.gstatic.com https://unpkg.com; connect-src 'self' https://firestore.googleapis.com https://www.googleapis.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https://*.tile.openstreetmap.org; font-src 'self';" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Trash2Cash — Govt Collector</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header class="topbar">
+<div class="brand">TRASH 2 CASH — Govt</div>
+<a class="smalllink" href="index.html">Logout</a>
+</header>
+
+
+<main class="page-area">
+<section class="card">
+<h3>Collector</h3>
+<label>Collector ID: <select id="gov-list"></select></label>
+<div class="row" style="margin-top:10px">
+<input id="ref-input" placeholder="Ref ID" class="flex-1" />
+<button id="collect" class="primary">Collect</button>
+</div>
+</section>
+
+
+<section class="card">
+<h3>Recently Collected</h3>
+<div id="collected">Loading...</div>
+</section>
+</main>
+
+
+<script type="module">
+import { seedIfEmpty, getDocsFromCol, addOrSetDoc, updateDocField, onRealtimeCollection } from './common.js';
+
+
+await seedIfEmpty();
+const govList = document.getElementById('gov-list');
+const gdocs = await getDocsFromCol('gov');
+gdocs.forEach(g=>{ const o=document.createElement('option'); o.value=g.id; o.textContent = g.id + ' ('+g.name+')'; govList.appendChild(o); });
+
+
+document.getElementById('collect').onclick = async ()=>{
+const ref = document.getElementById('ref-input').value.trim(); if(!ref) return alert('Enter ref');
+const t = await updateDocField('trash', ref, doc=>{ if(!doc) throw 'notfound'; doc.status='COL'; (doc.timeline||[]).push({code:'COL',at:new Date().toISOString()}); return doc; });
+alert('Collected ' + ref);
+};
+
+
+const collectedEl = document.getElementById('collected');
+onRealtimeCollection('trash', snap=>{
+const arr = snap.filter(x=> x.status !== 'PEN').sort((a,b)=> b.createdAt.localeCompare(a.createdAt));
+collectedEl.innerHTML = arr.map(i=>`<div class='list-item'><b>${i.ref}</b> ${i.type} ${i.qty}kg — ${i.status}</div>`).join('') || '<div>No items</div>';
+});
+</script>
+</body>
+</html>

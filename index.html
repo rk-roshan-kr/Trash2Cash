@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://www.gstatic.com https://unpkg.com; connect-src 'self' https://firestore.googleapis.com https://www.googleapis.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https://*.tile.openstreetmap.org; font-src 'self';" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TRASH 2 CASH — Login</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* small override for login form width */
+    .auth-card { max-width:520px; margin:28px auto; }
+    .field { margin-bottom:10px; }
+    label{display:block;font-weight:600;margin-bottom:6px}
+    .hint{color:#666;font-size:13px;margin-top:6px}
+    .error{color:#b91c1c;background:#fee2e2;padding:8px;border-radius:8px;margin-bottom:10px}
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">TRASH 2 CASH</div>
+  </header>
+
+  <main class="page-area">
+    <div class="card auth-card">
+      <h2>Prototype — Sign in</h2>
+
+      <div id="errorBox" style="display:none" class="error"></div>
+
+      <div class="field">
+        <label for="username">Username</label>
+        <input id="username" placeholder="e.g. user1" autocomplete="username" />
+      </div>
+
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" type="password" placeholder="password" autocomplete="current-password" />
+      </div>
+
+      <div class="field">
+        <label for="roleSel">Role (optional — will be validated against account)</label>
+        <select id="roleSel">
+          <option value="">Auto (detect from username)</option>
+          <option value="user">User</option>
+          <option value="gov">Govt</option>
+          <option value="company">Company</option>
+        </select>
+      </div>
+
+      <div class="row" style="margin-top:8px">
+        <button id="btnLogin" class="primary">Sign in</button>
+        <button id="btnDemo" style="margin-left:8px">Fill demo (user1)</button>
+      </div>
+
+      <p class="hint">Demo accounts: user1/user2/user3 | gov1/gov2 | co1/co2 — password is <b>1234</b> for all.</p>
+    </div>
+  </main>
+
+  <script>
+    // Hard-coded demo credential store (demo-only)
+    // username -> { password, role }
+    const CREDENTIALS = {
+      user1: { password: "1234", role: "user" },
+      user2: { password: "1234", role: "user" },
+      user3: { password: "1234", role: "user" },
+
+      gov1: { password: "1234", role: "gov" },
+      gov2: { password: "1234", role: "gov" },
+
+      co1: { password: "1234", role: "company" },
+      co2: { password: "1234", role: "company" }
+    };
+
+    const err = document.getElementById('errorBox');
+    const username = document.getElementById('username');
+    const password = document.getElementById('password');
+    const roleSel = document.getElementById('roleSel');
+    const btn = document.getElementById('btnLogin');
+    const btnDemo = document.getElementById('btnDemo');
+
+    btnDemo.onclick = () => { username.value='user1'; password.value='1234'; roleSel.value='user'; };
+
+    function showError(text){
+      err.style.display='block';
+      err.textContent = text;
+    }
+    function clearError(){
+      err.style.display='none';
+      err.textContent = '';
+    }
+
+    btn.onclick = (e) => {
+      clearError();
+      const u = (username.value || '').trim();
+      const p = (password.value || '').trim();
+      const forcedRole = roleSel.value || '';
+
+      if(!u || !p) return showError('Enter both username and password.');
+
+      const record = CREDENTIALS[u];
+      if(!record) return showError('Unknown username. Pick user1,user2,user3 or gov1/co1 etc.');
+
+      if(p !== record.password) return showError('Incorrect password.');
+
+      if(forcedRole && forcedRole !== record.role) return showError('Selected role does not match the account role.');
+
+      // success
+      sessionStorage.setItem('t2c_role', record.role);
+      sessionStorage.setItem('t2c_id', u);
+
+      // redirect by role
+      if(record.role === 'user') window.location.href = 'user.html';
+      else if(record.role === 'gov') window.location.href = 'govt.html';
+      else if(record.role === 'company') window.location.href = 'company.html';
+      else { showError('Unknown role.'); }
+    };
+
+    // allow Enter key to submit
+    [username,password].forEach(el => {
+      el.addEventListener('keydown', ev => {
+        if(ev.key === 'Enter') btn.click();
+      });
+    });
+  </script>
+</body>
+</html>

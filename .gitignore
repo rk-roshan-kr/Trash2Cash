@@ -1,0 +1,18 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Archives / temp
+*.zip
+*.log
+
+# Node / Web (not used now, future-proof)
+node_modules/
+dist/
+build/
+
+# Env / secrets
+.env
+.env.*
