@@ -52,3 +52,4 @@ button.primary{background:var(--brand);color:#fff;border:0;padding:10px 12px;bor
 .quick-btn{background:#fafafa;border:1px dashed #eee;padding:8px 10px;border-radius:8px;cursor:pointer}
 .brand-sub{font-size:13px;color:var(--muted)}
 
+/* REMOVED EXTRA "}" FROM HERE */

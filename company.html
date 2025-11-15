@@ -2,121 +2,462 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://www.gstatic.com https://unpkg.com; connect-src 'self' https://firestore.googleapis.com https://www.googleapis.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https://*.tile.openstreetmap.org; font-src 'self';" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Trash2Cash — Company</title>
   <link rel="stylesheet" href="style.css" />
+  <style>
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; border-bottom: 1px solid #eee; margin-bottom: 16px; }
+    .tabs button {
+      padding: 10px 16px;
+      border: 0;
+      background: #f0f0f0;
+      border-radius: 6px 6px 0 0;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 14px;
+      position: relative;
+      top: 1px;
+    }
+    .tabs button.active {
+      background: #fff;
+      border: 1px solid #eee;
+      border-bottom: 1px solid #fff;
+      color: var(--brand);
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeIn 0.3s; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* Filters */
+    .filters { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .filters select { padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
+    
+    /* Dashboard Stats */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+    .stat-card { background: #f9f9f9; border: 1px solid #eee; border-radius: 8px; padding: 16px; }
+    .stat-card h4 { margin: 0 0 8px 0; color: var(--muted); }
+    .stat-card .stat-value { font-size: 2.5em; font-weight: 700; color: var(--brand); }
+    
+    /* Lot Grid */
+    .lot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+    .lot-card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .lot-card h4 { margin: 0 0 8px 0; }
+    .lot-card .lot-id { font-size: 13px; color: var(--muted); font-weight: 600; }
+    
+    /* Progress Bar */
+    .progress-bar {
+      background: #eee;
+      border-radius: 10px;
+      height: 10px;
+      width: 100%;
+      overflow: hidden;
+      margin: 8px 0;
+    }
+    .progress-bar div {
+      background: var(--brand);
+      height: 100%;
+      border-radius: 10px;
+    }
+    
+    /* Bidding Section */
+    .bid-info { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+    .bid-info div { font-size: 13px; }
+    .bid-info div b { display: block; font-size: 16px; color: #333; }
+    
+    .bid-action input {
+      width: 100px;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      margin-right: 8px;
+    }
+    
+    /* My Bids/Deliveries List */
+    .list-item { border-bottom: 1px solid #eee; padding: 12px 0; }
+    .list-item:last-child { border: 0; }
+    .bid-status { font-weight: 700; }
+    .bid-status.winning { color: #28a745; }
+    .bid-status.outbid { color: #dc3545; }
+  </style>
 </head>
 
 <body>
 
   <header class="topbar">
-    <div class="brand">TRASH 2 CASH — Company</div>
-    <a class="smalllink" href="index.html">Logout</a>
+    <div class="brand">TRASH 2 CASH — Company Portal</div>
+    <div style="padding-right:12px">
+      <span style="color:var(--muted); font-size:13px; margin-right:10px;">Welcome, <b id="company-name">...</b></span>
+      <a id="logout" class="small">Logout</a>
+    </div>
   </header>
 
   <main class="page-area">
+    <div id="error" class="error" style="display:none"></div>
 
-    <section class="card">
-      <h3>Select Company</h3>
-      <label>Company:
-        <select id="co-list"></select>
-      </label>
+    <div class="tabs">
+      <button id="tab-btn-dashboard" class="active">Dashboard</button>
+      <button id="tab-btn-available">Available Lots</button>
+      <button id="tab-btn-bids">My Bids</button>
+      <button id="tab-btn-delivery">My Deliveries</button>
+    </div>
+
+    <section id="tab-dashboard" class="tab-content active">
+      <div class="card">
+        <h3>Company Dashboard</h3>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h4>Active Bids</h4>
+            <div id="stat-active-bids" class="stat-value">--</div>
+          </div>
+          <div class="stat-card">
+            <h4>Lots Won</h4>
+            <div id="stat-lots-won" class="stat-value">--</div>
+          </div>
+          <div class="stat-card">
+            <h4>Deliveries in Progress</h4>
+            <div id="stat-deliveries" class="stat-value">--</div>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <section class="card">
-      <h3>Open Lots</h3>
-      <div id="lots">Loading...</div>
+    <section id="tab-available" class="tab-content">
+      <div class="card">
+        <h3>Available Lots</h3>
+        <div class="filters">
+          <select id="filter-type">
+            <option value="">All Types</option>
+            <option value="P">Plastic</option>
+            <option value="A">Paper</option>
+            <option value="M">Metal</option>
+            <option value="G">Glass</option>
+            <option value="X">Mixed</option>
+          </select>
+          <select id="filter-city">
+            <option value="">All Cities</option>
+            <option value="CHD">Chandigarh</option>
+            <option value="D">Dhanbad</option>
+            <option value="DEL">Delhi</option>
+          </select>
+          <select id="filter-status">
+            <option value="OPEN">Open for Bids</option>
+            <option value="FUL">Full (Bidding Closed)</option>
+            <option value="SLD">Sold</option>
+          </select>
+        </div>
+        <div id="lots-grid" class="lot-grid">Loading lots...</div>
+      </div>
+    </section>
+    
+    <section id="tab-bids" class="tab-content">
+      <div class="card">
+        <h3>My Bids</h3>
+        <div id="bids-history">Loading my bids...</div>
+      </div>
     </section>
 
-    <section class="card">
-      <h3>Your Bids</h3>
-      <div id="my-bids">Loading...</div>
+    <section id="tab-delivery" class="tab-content">
+      <div class="card">
+        <h3>My Deliveries</h3>
+        <div id="delivery-list">Loading my deliveries...</div>
+      </div>
     </section>
 
   </main>
 
   <script type="module">
-    import { seedIfEmpty, getDocsFromCol, onRealtimeCollection, updateDocField } from "./common.js";
+    import common from "./common.js";
+    const { 
+      initApp, onRealtimeCollection, updateDocField,
+      getUser, fullTypeName
+    } = common;
 
-    await seedIfEmpty();
+    initApp();
 
-    // Load company list
-    const select = document.getElementById("co-list");
-    const companies = await getDocsFromCol("companies");
-    companies.forEach(c => {
-      const opt = document.createElement("option");
-      opt.value = c.id;
-      opt.textContent = `${c.id} (${c.name})`;
-      select.appendChild(opt);
-    });
+    // --- CRITICAL FIX: Get company ID from session storage ---
+    const companyId = sessionStorage.getItem('t2c_id');
+    if (!companyId) {
+      alert("You are not logged in. Redirecting...");
+      window.location.href = "index.html"; // <-- FIXED: Was auth.html
+    }
 
-    select.onchange = () => {
-      renderLots();
-      renderMyBids();
+    // --- Global Variables ---
+    let allLotsCache = [];
+    const elements = {
+      companyName: document.getElementById("company-name"),
+      error: document.getElementById("error"),
+      
+      tabs: {
+        dashboard: document.getElementById("tab-dashboard"),
+        available: document.getElementById("tab-available"),
+        bids: document.getElementById("tab-bids"),
+        delivery: document.getElementById("tab-delivery")
+      },
+      tabBtns: {
+        dashboard: document.getElementById("tab-btn-dashboard"),
+        available: document.getElementById("tab-btn-available"),
+        bids: document.getElementById("tab-btn-bids"),
+        delivery: document.getElementById("tab-btn-delivery")
+      },
+      stats: {
+        activeBids: document.getElementById("stat-active-bids"),
+        lotsWon: document.getElementById("stat-lots-won"),
+        deliveries: document.getElementById("stat-deliveries")
+      },
+      filters: {
+        type: document.getElementById("filter-type"),
+        city: document.getElementById("filter-city"),
+        status: document.getElementById("filter-status")
+      },
+      containers: {
+        lots: document.getElementById("lots-grid"),
+        bids: document.getElementById("bids-history"),
+        delivery: document.getElementById("delivery-list")
+      }
     };
 
-    // Listen to realtime LOT changes
-    onRealtimeCollection("lots", snap => {
-      window.__LOTS = {};
-      snap.forEach(doc => window.__LOTS[doc.id] = doc);
-      renderLots();
-      renderMyBids();
-    });
+    // --- Helper Functions ---
+    function showErr(msg) { elements.error.style.display = 'block'; elements.error.textContent = msg; }
+    
+    function getHighestBid(bids = []) {
+      if (!bids || bids.length === 0) return { price: 0, company: "N/A" };
+      return bids.sort((a, b) => b.price - a.price)[0];
+    }
+    
+    function getMyBid(bids = [], cId) {
+      return bids.find(b => b.company === cId);
+    }
+    
+    function calculateProgress(weight = 0, target = 500) {
+      return (weight / target) * 100;
+    }
 
-    function renderLots() {
-      const cont = document.getElementById("lots");
-      const lots = Object.values(window.__LOTS || {});
+    // --- Tab Switching ---
+    function switchTab(tabName) {
+      // Hide all content, deactivate all buttons
+      Object.values(elements.tabs).forEach(tab => tab.classList.remove('active'));
+      Object.values(elements.tabBtns).forEach(btn => btn.classList.remove('active'));
+      
+      // Show the selected tab and activate its button
+      elements.tabs[tabName].classList.add('active');
+      elements.tabBtns[tabName].classList.add('active');
+      
+      // Refresh data for the new tab
+      refreshAllData(allLotsCache);
+    }
 
-      cont.innerHTML =
-        lots.map(l => `
-        <div class="list-item">
-          <b>${l.id}</b> — ${l.type}<br>
-          ${l.weight || 0}kg / ${l.target || 500}kg — ${l.isFull ? "<b>FULL</b>" : "Open"}
-          <div style="margin-top:8px">
-            <input placeholder="₹ price" id="bid-${l.id}" style="width:90px" />
-            <button class="primary" onclick="placeBid('${l.id}')">Bid</button>
+    elements.tabBtns.dashboard.onclick = () => switchTab('dashboard');
+    elements.tabBtns.available.onclick = () => switchTab('available');
+    elements.tabBtns.bids.onclick = () => switchTab('bids');
+    elements.tabBtns.delivery.onclick = () => switchTab('delivery');
+
+    // --- Logout ---
+    document.getElementById('logout').onclick = () => {
+      sessionStorage.clear();
+      window.location.href = "index.html"; // <-- FIXED: Was auth.html
+    };
+
+    // --- Render Functions ---
+
+    function refreshAllData(lots) {
+      renderDashboard(lots);
+      renderLots(lots);
+      renderMyBids(lots);
+      renderMyDeliveries(lots);
+    }
+
+    function renderDashboard(lots) {
+      const myBids = lots.filter(l => l.status === 'OPEN' && l.bids?.some(b => b.company === companyId));
+      const myWins = lots.filter(l => l.winner === companyId);
+      const inDelivery = myWins.filter(l => l.status === 'SLD');
+      
+      elements.stats.activeBids.textContent = myBids.length;
+      elements.stats.lotsWon.textContent = myWins.length;
+      elements.stats.deliveries.textContent = inDelivery.length;
+    }
+
+    function renderLots(lots) {
+      const type = elements.filters.type.value;
+      const city = elements.filters.city.value;
+      const status = elements.filters.status.value;
+      
+      const filtered = lots.filter(lot => {
+        return (!type || lot.type === type) &&
+               (!city || lot.city === city) &&
+               (!status || lot.status === status);
+      });
+      
+      if (filtered.length === 0) {
+        elements.containers.lots.innerHTML = "<div>No lots match your filters.</div>";
+        return;
+      }
+      
+      elements.containers.lots.innerHTML = filtered.map(l => {
+        const progress = calculateProgress(l.weight, l.target);
+        const highestBid = getHighestBid(l.bids);
+        
+        return `
+        <div class="lot-card">
+          <div>
+            <span class="lot-id">${l.id}</span>
+            <h4>${fullTypeName(l.type)} - ${l.city}</h4>
+            <div class="progress-bar"><div style="width: ${progress}%"></div></div>
+            <div class="lot-meta">
+              ${l.weight || 0}kg / ${l.target || 500}kg — <b>${l.status || 'OPEN'}</b>
+            </div>
+          </div>
+          <div>
+            <div class="bid-info">
+              <div>Current High Bid<b>₹ ${highestBid.price}</b></div>
+              <div>Total Bids<b>${l.bids?.length || 0}</b></div>
+            </div>
+            <div class="bid-action">
+              <input type="number" placeholder="₹ Your Bid" id="bid-${l.id}" />
+              <button class="primary" onclick="window.placeBid('${l.id}')">Place Bid</button>
+            </div>
           </div>
         </div>
-        `).join("") || "<div>No lots available</div>";
+        `;
+      }).join("");
     }
+    
+    function renderMyBids(lots) {
+      const myBids = lots
+        .filter(l => l.bids?.some(b => b.company === companyId))
+        .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+        
+      if (myBids.length === 0) {
+        elements.containers.bids.innerHTML = "<div>You have not placed any bids.</div>";
+        return;
+      }
+      
+      elements.containers.bids.innerHTML = myBids.map(l => {
+        const myBid = getMyBid(l.bids, companyId);
+        const highestBid = getHighestBid(l.bids);
+        
+        let statusText, statusClass;
+        if (l.status === 'SLD' && l.winner === companyId) {
+          statusText = "Won"; statusClass = "winning";
+        } else if (l.status === 'SLD') {
+          statusText = "Lost"; statusClass = "outbid";
+        } else if (myBid.price >= highestBid.price) {
+          statusText = "Winning"; statusClass = "winning";
+        } else {
+          statusText = "Outbid"; statusClass = "outbid";
+        }
 
-    function renderMyBids() {
-      const mine = [];
-      for (const [id, l] of Object.entries(window.__LOTS || {})) {
-        (l.bids || []).forEach(b => {
-          if (b.company === select.value) {
-            mine.push({ id, price: b.price, at: b.at });
-          }
-        });
+        return `
+        <div class="list-item">
+          <h4>${l.id} (${fullTypeName(l.type)})</h4>
+          <div>Your Bid: <b>₹ ${myBid.price}</b></div>
+          <div>Highest Bid: <b>₹ ${highestBid.price}</b></div>
+          <div>Status: <span class="bid-status ${statusClass}">${statusText}</span></div>
+        </div>
+        `;
+      }).join("");
+    }
+    
+    function renderMyDeliveries(lots) {
+      const myDeliveries = lots
+        .filter(l => l.winner === companyId && (l.status === 'SLD' || l.status === 'DELIVERED'))
+        .sort((a, b) => (b.fullAt || "").localeCompare(a.fullAt || ""));
+        
+      if (myDeliveries.length === 0) {
+        elements.containers.delivery.innerHTML = "<div>You have no deliveries in progress.</div>";
+        return;
       }
 
-      document.getElementById("my-bids").innerHTML =
-        mine.map(m => `
-          <div class="list-item">
-            <b>${m.id}</b> — ₹${m.price} <br><span class="small">${m.at}</span>
-          </div>
-        `).join("") || "<div>No bids placed</div>";
+      elements.containers.delivery.innerHTML = myDeliveries.map(l => {
+        return `
+        <div class="list-item">
+          <h4>${l.id} (${fullTypeName(l.type)})</h4>
+          <div>Winning Bid: <b>₹ ${getHighestBid(l.bids).price}</b></div>
+          <div>Status: <b>${l.status === 'SLD' ? 'In Transit' : 'Delivered'}</b></div>
+          <div class="lot-meta">Purchased on: ${new Date(l.fullAt).toLocaleDateString()}</div>
+        </div>
+        `;
+      }).join("");
     }
-
+    
+    // --- Bidding Action ---
     window.placeBid = async (lotId) => {
       const input = document.getElementById("bid-" + lotId);
       const price = parseFloat(input.value);
-      if (!price) return alert("Enter bid amount");
-
-      await updateDocField("lots", lotId, data => {
-        const bids = data.bids || [];
-        bids.push({
-          company: select.value,
-          price,
-          at: new Date().toISOString()
+      if (!price || price <= 0) return alert("Please enter a valid bid amount.");
+      
+      try {
+        await updateDocField("lots", lotId, data => {
+          const bids = data.bids || [];
+          
+          // Check if company already bid, update it
+          const existingBidIndex = bids.findIndex(b => b.company === companyId);
+          if (existingBidIndex > -1) {
+            // Only update if new bid is higher
+            if (price <= bids[existingBidIndex].price) {
+              throw new Error("Your new bid must be higher than your previous bid.");
+            }
+            bids[existingBidIndex].price = price;
+            bids[existingBidIndex].at = new Date().toISOString();
+          } else {
+            // New bid
+            bids.push({
+              company: companyId,
+              price: price,
+              at: new Date().toISOString()
+            });
+          }
+          
+          data.bids = bids;
+          return data; // Return the modified data to be saved
         });
-        data.bids = bids;
-        return data;
-      });
-
-      alert("Bid placed!");
+        
+        alert("Bid placed successfully!");
+        input.value = "";
+        
+      } catch (e) {
+        console.error("Bid failed:", e);
+        showErr("Bid failed: " + e.message);
+      }
     };
+
+    // --- Main Initializer ---
+    (async function start() {
+      try {
+        // 1. Get Company Name
+        const me = await getUser(companyId);
+        if (me) {
+          elements.companyName.textContent = me.name || companyId;
+        } else {
+          showErr("Could not find company profile.");
+        }
+        
+        // 2. Attach Filters
+        elements.filters.type.onchange = () => renderLots(allLotsCache);
+        elements.filters.city.onchange = () => renderLots(allLotsCache);
+        elements.filters.status.onchange = () => renderLots(allLotsCache);
+        
+        // 3. Start Realtime Listener for Lots
+        onRealtimeCollection("lots", (lots) => {
+          allLotsCache = lots;
+          refreshAllData(lots);
+        }, (err) => {
+          showErr("Error loading data: " + err.message);
+        });
+        
+      } catch (e) {
+        console.error("Initialization failed:", e);
+        showErr("Page failed to load: " + e.message);
+      }
+    })();
+
   </script>
 
 </body>

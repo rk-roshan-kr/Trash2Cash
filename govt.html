@@ -1,59 +1,574 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://www.gstatic.com https://unpkg.com; connect-src 'self' https://firestore.googleapis.com https://www.googleapis.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https://*.tile.openstreetmap.org; font-src 'self';" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Trash2Cash — Govt Collector</title>
-<link rel="stylesheet" href="style.css" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Trash2Cash — Govt. Portal</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  
+  <style>
+    /* Main map */
+    #map {
+      height: 60vh;
+      border-radius: 10px;
+      z-index: 10;
+      border: 1px solid #eee;
+    }
+    
+    /* Live Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+    .stat-card {
+      background: #f9f9f9;
+      border: 1px solid #eee;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .stat-card h4 { margin: 0 0 8px 0; color: var(--muted); font-weight: 500; }
+    .stat-card .stat-value { font-size: 2.5em; font-weight: 700; color: var(--brand); }
+    
+    /* Map Legend */
+    .legend {
+      padding: 10px;
+      background: #fff;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+    }
+    .legend-item { display: flex; align-items: center; margin-bottom: 5px; }
+    .legend-icon { width: 20px; height: 20px; margin-right: 8px; }
+    
+    /* Custom CSS Icon for Sorting Facilities */
+    .facility-icon {
+      background: #3498db; border: 2px solid #fff; border-radius: 50%;
+      width: 20px; height: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+      text-align: center; color: white; font-weight: bold;
+      font-size: 12px; line-height: 17px; 
+    }
+    
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; border-bottom: 1px solid #eee; margin-bottom: 16px; flex-wrap: wrap; }
+    .tabs button {
+      padding: 10px 16px; border: 0; background: #f0f0f0;
+      border-radius: 6px 6px 0 0; cursor: pointer;
+      font-weight: 600; font-size: 14px; position: relative; top: 1px;
+    }
+    .tabs button.active {
+      background: #fff; border: 1px solid #eee;
+      border-bottom: 1px solid #fff; color: var(--brand);
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    
+    /* Collection & Dropoff Forms */
+    .form-row { display: flex; gap: 10px; align-items: center; }
+    .form-row input, .form-row select { flex: 1; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
+    
+    #truck-inventory-list .list-item {
+        border: 1px solid #eee;
+        padding: 10px;
+        border-radius: 6px;
+        margin-bottom: 8px;
+    }
+    
+    /* STICKER PRINTING STYLES */
+    #sticker-to-print {
+      display: none; /* Hidden by default */
+      width: 300px;
+      padding: 15px;
+      border: 1px dashed #000;
+      font-family: Arial, sans-serif;
+    }
+    #sticker-to-print h4 { margin: 0 0 10px 0; }
+    #sticker-to-print p { margin: 5px 0 0 0; font-size: 13px; }
+    #sticker-barcode { width: 100%; height: 50px; }
+    
+    /* CSS for printing */
+    @media print {
+      body * { display: none; }
+      #sticker-to-print, #sticker-to-print * { display: block; }
+      #sticker-to-print { position: absolute; left: 0; top: 0; }
+      @page { size: auto; margin: 0; }
+    }
+    
+  </style>
 </head>
+
 <body>
+
 <header class="topbar">
-<div class="brand">TRASH 2 CASH — Govt</div>
-<a class="smalllink" href="index.html">Logout</a>
+  <div class="brand">TRASH 2 CASH — Govt. Portal</div>
+  <div style="padding-right:12px">
+    <span style="color:var(--muted); font-size:13px; margin-right:10px;">Welcome, <b id="user-name">...</b></span>
+    <a id="logout" class="small">Logout</a>
+  </div>
 </header>
 
-
 <main class="page-area">
-<section class="card">
-<h3>Collector</h3>
-<label>Collector ID: <select id="gov-list"></select></label>
-<div class="row" style="margin-top:10px">
-<input id="ref-input" placeholder="Ref ID" class="flex-1" />
-<button id="collect" class="primary">Collect</button>
-</div>
-</section>
+  <div id="error" class="error" style="display:none"></div>
 
+  <div class="tabs">
+    <button id="tab-btn-map" class="active">Live Map</button>
+    <button id="tab-btn-stats">Stats</button>
+    <button id="tab-btn-collect">Collect & Print</button>
+    <button id="tab-btn-truck">My Truck</button> 
+  </div>
 
-<section class="card">
-<h3>Recently Collected</h3>
-<div id="collected">Loading...</div>
-</section>
+  <section id="tab-map" class="tab-content active">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+        <h3>Live Logistics Map</h3>
+        <div class="legend">
+          <div class="legend-item">
+            <img class="legend-icon" src="https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png" style="width:12px; height:20px;">
+            <span>Garbage Truck</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-icon facility-icon" style="padding-left:1px;">S</div>
+            <span>Sorting Facility</span>
+          </div>
+        </div>
+      </div>
+      <div id="map"></div>
+    </div>
+  </section>
+  
+  <section id="tab-stats" class="tab-content">
+    <div class="card">
+      <h3>Live System Stats</h3>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <h4>Live Trucks</h4>
+          <div id="stat-trucks" class="stat-value">--</div>
+        </div>
+        <div class="stat-card">
+          <h4>Total Trash (kg)</h4>
+          <div id="stat-trash" class="stat-value">--</div>
+        </div>
+        <div class="stat-card">
+          <h4>Open Lots</h4>
+          <div id="stat-lots" class="stat-value">--</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-collect" class="tab-content">
+    <div class="card">
+      <h3>Collect Trash Item</h3>
+      <p class="muted-inline">Enter the user's trash reference ID to mark it as collected and print a tracking label.</p>
+      <div class="form-row" style="margin-top:10px;">
+        <input id="collect-ref-id" placeholder="Enter Ref ID (e.g., PD12AB)">
+        <button id="btn-collect-print" class="primary">Collect & Print</button>
+      </div>
+      <div id="collect-status" style="margin-top:10px;"></div>
+    </div>
+  </section>
+  
+  <section id="tab-truck" class="tab-content">
+    <div class="card">
+      <h3>My Truck Inventory</h3>
+      <div class="stats-grid" style="margin-bottom: 16px;">
+        <div class="stat-card">
+          <h4>Parcels on Truck</h4>
+          <div id="truck-item-count" class="stat-value">0</div>
+        </div>
+        <div class="stat-card">
+          <h4>Inventory Value (10% Payout)</h4>
+          <div id="truck-item-value" class="stat-value">₹0</div>
+        </div>
+      </div>
+      <div id="truck-inventory-list">
+        <div class="muted-inline">Your truck is empty.</div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <h3>Drop Off at Facility</h3>
+      <p class="muted-inline">Select a facility to drop off all items. This will process the items and **pay users 10%** of the base value.</p>
+      <div class="form-row" style="margin-top:10px;">
+        <select id="dropoff-facility">
+            <option value="">-- Select a Facility --</option>
+        </select>
+        <button id="btn-dropoff" class="primary" disabled>Drop Off & Pay 10%</button>
+      </div>
+      <div id="dropoff-status" style="margin-top:10px;"></div>
+    </div>
+  </section>
+
 </main>
 
+<div id="sticker-to-print">
+  <h4>TRASH 2 CASH - OFFICIAL LABEL</h4>
+  <svg id="sticker-barcode"></svg>
+  <p><b>Ref ID:</b> <span id="sticker-ref-id"></span></p>
+  <p><b>Collected By:</b> <span id="sticker-employee"></span></p>
+  <p><b>Date:</b> <span id="sticker-date"></span></p>
+</div>
 
 <script type="module">
-import { seedIfEmpty, getDocsFromCol, addOrSetDoc, updateDocField, onRealtimeCollection } from './common.js';
+  import common from './common.js';
+  const { 
+    initApp, 
+    onRealtimeCollection,
+    getUser,
+    updateDocField, 
+    PRICING_CHART // Import the pricing chart
+  } = common;
 
+  initApp();
 
-await seedIfEmpty();
-const govList = document.getElementById('gov-list');
-const gdocs = await getDocsFromCol('gov');
-gdocs.forEach(g=>{ const o=document.createElement('option'); o.value=g.id; o.textContent = g.id + ' ('+g.name+')'; govList.appendChild(o); });
+  // --- Auth Check ---
+  const userId = sessionStorage.getItem('t2c_id'); 
+  if (!userId || !userId.startsWith('gov')) {
+    alert("Access denied. Redirecting to login.");
+    window.location.href = "index.html";
+  }
+  
+  // --- Global Elements ---
+  const errBox = document.getElementById('error');
+  let map; 
+  let truckMarkers = {}; 
+  let facilityMarkers = {}; 
+  let myInventoryCache = []; 
+  
+  // Tab elements
+  const tabs = {
+    map: document.getElementById('tab-map'),
+    stats: document.getElementById('tab-stats'),
+    collect: document.getElementById('tab-collect'),
+    truck: document.getElementById('tab-truck')
+  };
+  const tabBtns = {
+    map: document.getElementById('tab-btn-map'),
+    stats: document.getElementById('tab-btn-stats'),
+    collect: document.getElementById('tab-btn-collect'),
+    truck: document.getElementById('tab-btn-truck')
+  };
+  
+  // Stats elements
+  const statTrucks = document.getElementById('stat-trucks');
+  const statTrash = document.getElementById('stat-trash');
+  const statLots = document.getElementById('stat-lots');
 
+  // Collect elements
+  const collectRefId = document.getElementById('collect-ref-id');
+  const btnCollectPrint = document.getElementById('btn-collect-print');
+  const collectStatus = document.getElementById('collect-status');
+  
+  // My Truck elements
+  const truckItemCount = document.getElementById('truck-item-count');
+  const truckItemValue = document.getElementById('truck-item-value'); 
+  const truckInventoryList = document.getElementById('truck-inventory-list');
+  const dropoffFacility = document.getElementById('dropoff-facility');
+  const btnDropoff = document.getElementById('btn-dropoff');
+  const dropoffStatus = document.getElementById('dropoff-status');
 
-document.getElementById('collect').onclick = async ()=>{
-const ref = document.getElementById('ref-input').value.trim(); if(!ref) return alert('Enter ref');
-const t = await updateDocField('trash', ref, doc=>{ if(!doc) throw 'notfound'; doc.status='COL'; (doc.timeline||[]).push({code:'COL',at:new Date().toISOString()}); return doc; });
-alert('Collected ' + ref);
-};
+  function showErr(msg){ errBox.style.display='block'; errBox.textContent=msg; }
+  function clearErr(){ errBox.style.display='none'; }
 
+  /* --- Logout --- */
+  document.getElementById('logout').onclick = () => {
+    sessionStorage.clear();
+    location.href = "index.html";
+  };
+  
+  /* --- Tab Switching --- */
+  function switchTab(tabName) {
+    Object.values(tabs).forEach(tab => tab.classList.remove('active'));
+    Object.values(tabBtns).forEach(btn => btn.classList.remove('active'));
+    tabs[tabName].classList.add('active');
+    tabBtns[tabName].classList.add('active');
+  }
+  tabBtns.map.onclick = () => switchTab('map');
+  tabBtns.stats.onclick = () => switchTab('stats');
+  tabBtns.collect.onclick = () => switchTab('collect');
+  tabBtns.truck.onclick = () => switchTab('truck'); 
+  
+  
+  /* --- 1. Map & Logistics --- */
+  function initMap() {
+    try {
+      map = L.map('map').setView([30.737, 76.768], 14); 
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+        maxZoom:19,
+        attribution: '© OpenStreetMap'
+      }).addTo(map);
+    } catch (e) {
+      showErr("Could not initialize map. " + e.message);
+    }
+  }
+  
+  function loadFacilities() {
+    if (!map) return;
+    const facilityIcon = L.divIcon({ className: 'facility-icon', html: 'S', iconSize: [20, 20], iconAnchor: [10, 10] });
+    
+    // Listen for facilities in real-time
+    onRealtimeCollection("facilities", (facilities) => {
+      // Populate dropdown only once
+      if (dropoffFacility.options.length <= 1) { 
+         dropoffFacility.innerHTML = '<option value="">-- Select a Facility --</option>'; 
+         facilities.forEach(fac => {
+          dropoffFacility.innerHTML += `<option value="${fac.id}">${fac.name}</option>`;
+         });
+      }
+      
+      // Update map markers
+      facilities.forEach(fac => {
+        if (!facilityMarkers[fac.id]) {
+          facilityMarkers[fac.id] = L.marker([fac.lat, fac.lon], { 
+            icon: facilityIcon, zIndexOffset: -100
+          }).addTo(map).bindPopup(`<b>${fac.name}</b><br>Sorting Facility`);
+        }
+      });
+      
+      // Remove deleted facilities from map
+      Object.keys(facilityMarkers).forEach(markerId => {
+        if (!facilities.some(f => f.id === markerId)) {
+          map.removeLayer(facilityMarkers[markerId]);
+          delete facilityMarkers[markerId];
+        }
+      });
+    }, (err) => showErr("Could not load facilities: " + err.message));
+  }
 
-const collectedEl = document.getElementById('collected');
-onRealtimeCollection('trash', snap=>{
-const arr = snap.filter(x=> x.status !== 'PEN').sort((a,b)=> b.createdAt.localeCompare(a.createdAt));
-collectedEl.innerHTML = arr.map(i=>`<div class='list-item'><b>${i.ref}</b> ${i.type} ${i.qty}kg — ${i.status}</div>`).join('') || '<div>No items</div>';
-});
+  function loadTrucks() {
+    if (!map) return;
+    onRealtimeCollection("trucks", (trucks) => {
+      statTrucks.textContent = trucks.length;
+      trucks.forEach(t => {
+        const truckId = t.id; 
+        if (!truckId || !t.lat || !t.lon) return;
+        if (!truckMarkers[truckId]) {
+          truckMarkers[truckId] = L.marker([t.lat, t.lon])
+            .addTo(map).bindPopup(`<b>Truck ${t.id}</b>`);
+        } else {
+          truckMarkers[truckId].setLatLng([t.lat, t.lon]);
+        }
+      });
+      Object.keys(truckMarkers).forEach(markerId => {
+        if (!trucks.some(t => t.id === markerId)) {
+          map.removeLayer(truckMarkers[markerId]);
+          delete truckMarkers[markerId];
+        }
+      });
+    }, (err) => showErr("Could not load trucks: " + err.message));
+  }
+
+  /* --- 2. Stats & Truck Inventory --- */
+  function loadStatsAndInventory() {
+    onRealtimeCollection("trash", (allTrash) => {
+      // Calculate total trash
+      const totalKg = allTrash.reduce((sum, item) => sum + (item.qty || 0), 0);
+      statTrash.textContent = totalKg.toFixed(1);
+      
+      // Calculate my truck's inventory
+      myInventoryCache = allTrash.filter(item => {
+        if (item.status !== 'COL') return false;
+        const lastColEntry = [...(item.timeline || [])].reverse().find(t => t.code === 'COL');
+        return lastColEntry && lastColEntry.worker === userId;
+      });
+      
+      // Update "My Truck" tab
+      renderMyTruck(myInventoryCache);
+      
+    }, (err) => console.error("Could not load trash stats:", err));
+    
+    // Listen for lot changes
+    onRealtimeCollection("lots", (allLots) => {
+      const openLots = allLots.filter(l => l.status === 'OPEN').length;
+      statLots.textContent = openLots;
+    }, (err) => console.error("Could not load lot stats:", err));
+  }
+  
+  function renderMyTruck(inventory) {
+      let totalValue = 0;
+      truckItemCount.textContent = inventory.length;
+      
+      if (inventory.length === 0) {
+        truckInventoryList.innerHTML = "<div class='muted-inline'>Your truck is empty.</div>";
+        btnDropoff.disabled = true; 
+        truckItemValue.textContent = "₹0";
+        return;
+      }
+      
+      truckInventoryList.innerHTML = inventory.map(item => {
+        const baseValue = (PRICING_CHART[item.type] || 0) * (item.qty || 0);
+        const payoutValue = baseValue * 0.10; // Calculate 10%
+        totalValue += payoutValue;
+        return `
+        <div class="list-item">
+          <b>${item.ref}</b> (${item.type}, ${item.qty}kg)
+          <div style="font-weight: 600;">10% Payout: ₹${payoutValue.toFixed(2)}</div>
+          <div class="muted-inline">Collected from: ${item.owner}</div>
+        </div>
+        `;
+      }).join('');
+      
+      truckItemValue.textContent = `₹${totalValue.toFixed(2)}`;
+      btnDropoff.disabled = false;
+  }
+  
+  /* --- 3. Collection & Printing --- */
+  function generateAndPrintBarcode(refId, employeeId) {
+    document.getElementById('sticker-ref-id').textContent = refId;
+    document.getElementById('sticker-employee').textContent = employeeId;
+    document.getElementById('sticker-date').textContent = new Date().toLocaleString();
+    
+    try {
+      JsBarcode("#sticker-barcode", refId, {
+        format: "CODE128", displayValue: false,
+        width: 2.5, height: 50, margin: 0
+      });
+    } catch (e) {
+      showErr("Could not generate barcode: " + e.message);
+      return;
+    }
+    window.print();
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const btnCollectPrint = document.getElementById('btn-collect-print');
+    if (btnCollectPrint) {
+      btnCollectPrint.onclick = async () => {
+        clearErr();
+        const refId = collectRefId.value.trim().toUpperCase();
+        if (!refId) return showErr('Please enter a Ref ID');
+  
+        btnCollectPrint.disabled = true;
+        collectStatus.textContent = "Processing...";
+  
+        try {
+          await updateDocField("trash", refId, (data) => {
+            if (!data) throw new Error(`No trash item found with ID: ${refId}`);
+            if (data.status !== 'PEN') throw new Error(`This item is already ${data.status}.`);
+  
+            const newTimeline = data.timeline || [];
+            newTimeline.push({ 
+              code: "COL", 
+              worker: userId, 
+              at: new Date().toISOString() 
+            });
+  
+            data.status = "COL";
+            data.timeline = newTimeline;
+  
+            return data;
+          });
+  
+          generateAndPrintBarcode(refId, userId);
+          collectStatus.textContent = `Success! Collected ${refId}. Label printed.`;
+          collectRefId.value = '';
+  
+        } catch (e) {
+          showErr(e.message);
+          collectStatus.textContent = "";
+        } finally {
+          btnCollectPrint.disabled = false;
+        }
+      };
+    } else {
+      console.error("btn-collect-print element not found in the DOM.");
+    }
+  });
+  
+  /* --- 4. Drop Off Logic --- */
+  btnDropoff.onclick = async () => {
+    clearErr();
+    const facilityId = dropoffFacility.value;
+    if (!facilityId) return showErr("Please select a sorting facility.");
+    if (myInventoryCache.length === 0) return showErr("Your truck is empty.");
+    
+    btnDropoff.disabled = true;
+    dropoffStatus.textContent = `Processing ${myInventoryCache.length} items...`;
+    
+    try {
+      // 1. Aggregate Payouts (10%)
+      const payouts = {};
+      myInventoryCache.forEach(item => {
+        const itemBaseValue = (PRICING_CHART[item.type] || 0) * (item.qty || 0);
+        const payout_10_percent = itemBaseValue * 0.10; // PAY 10%
+        if (payout_10_percent > 0) {
+          payouts[item.owner] = (payouts[item.owner] || 0) + payout_10_percent;
+        }
+      });
+
+      // 2. Create Trash Update Promises
+      const trashUpdatePromises = myInventoryCache.map(item => {
+        const newTimelineEntry = {
+          code: "SCN", // "Sorted at Center"
+          facility: facilityId,
+          worker: userId,
+          at: new Date().toISOString()
+        };
+        return updateDocField("trash", item.id, (data) => {
+          data.status = "SCN";
+          if(!data.timeline) data.timeline = [];
+          data.timeline.push(newTimelineEntry);
+          return data;
+        });
+      });
+      
+      // 3. Create User Wallet Update Promises
+      const userUpdatePromises = Object.entries(payouts).map(([ownerId, amount]) => {
+        return updateDocField("users", ownerId, (data) => {
+          if (!data) {
+             console.error(`Cannot pay user ${ownerId}: profile not found.`);
+             return null; 
+          }
+          data.wallet = (data.wallet || 0) + amount;
+          return data;
+        });
+      });
+      
+      // 4. Wait for ALL promises to finish
+      await Promise.all([
+        ...trashUpdatePromises, 
+        ...userUpdatePromises
+      ]);
+      
+      dropoffStatus.textContent = `Success! Dropped off ${myInventoryCache.length} items and paid 10% value to ${Object.keys(payouts).length} users.`;
+      
+    } catch (e) {
+      showErr("Drop-off failed: " + e.message);
+      dropoffStatus.textContent = "Drop-off failed. Please try again.";
+    } finally {
+      // The button will be re-enabled by the realtime listener 
+      // when it clears the inventory cache.
+    }
+  };
+
+  /**
+   * --- Main Start Function ---
+   */
+  (async function start() {
+    // Get user's name for the header
+    try {
+      const me = await getUser(userId);
+      if (me && me.name) {
+        document.getElementById('user-name').textContent = me.name;
+      } else {
+        document.getElementById('user-name').textContent = userId;
+      }
+    } catch (e) {
+      console.warn("Could not fetch user name:", e.message);
+      document.getElementById('user-name').textContent = userId;
+    }
+    
+    // Initialize all components
+    initMap();
+    loadFacilities();
+    loadTrucks();
+    loadStatsAndInventory(); // This now handles stats AND inventory
+    
+  })();
 </script>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </body>
 </html>

@@ -49,7 +49,6 @@
 <main class="page-area">
   <div id="error" class="error" style="display:none"></div>
 
-  <!-- CREATE LISTING -->
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <h3 style="margin:0">Create Trash Listing</h3>
@@ -71,26 +70,22 @@
     </div>
   </div>
 
-  <!-- WALLET -->
   <div class="card">
     <h3>Your Wallet</h3>
     <div id="wallet" class="small">Loading...</div>
   </div>
 
-  <!-- LISTINGS -->
   <div class="card">
     <h3>Your Listings</h3>
     <div id="listings">Loading...</div>
   </div>
 
-  <!-- MAP -->
   <div class="card">
     <h3>Map — Trucks</h3>
     <div id="map"></div>
   </div>
 </main>
 
-<!-- Amazon-style modal -->
 <div id="modalOverlay">
   <div id="modalBox">
     <h3>Tracking Timeline</h3>
@@ -114,19 +109,29 @@ const userId = sessionStorage.getItem('t2c_id') || "user1";
 /* Logout */
 document.getElementById('logout').onclick = () => {
   sessionStorage.clear();
-  location.href = "index.html";
+  location.href = "index.html"; // <-- FIXED: Was auth.html
 };
 
 const errBox = document.getElementById('error');
 function showErr(msg){ errBox.style.display='block'; errBox.textContent=msg; }
 function clearErr(){ errBox.style.display='none'; }
 
+// --- Get elements explicitly ---
+const statusEl = document.getElementById('status');
+const typeEl = document.getElementById('type');
+const qtyEl = document.getElementById('qty');
+const cityEl = document.getElementById('city');
+// ---------------------------------
+
 /* MAIN INIT */
 (async function start(){
   try {
-    await seedIfEmpty();
+    // await seedIfEmpty(); 
     const me = await getUser(userId);
-    if(!me) showErr("User not found: "+userId);
+    if(!me) {
+        showErr("User not found: "+userId);
+        return; 
+    }
 
     /* Wallet live */
     onRealtimeCollection("users", users=>{
@@ -147,7 +152,7 @@ function clearErr(){ errBox.style.display='none'; }
           <div class="list-item">
             <b>${it.ref}</b> — ${it.type} — ${it.qty}kg — <b>${fullStatusName(it.status)}</b>
             <br>
-            <button class="smalllink" onclick="window.showTimeline('${it.ref}')">Track Status</button>
+            <button class="smalllink" onclick="window.showTimeline('${it.id}')">Track Status</button>
           </div>
         `).join("")
           : `<div>No listings yet</div>`;
@@ -161,9 +166,16 @@ function clearErr(){ errBox.style.display='none'; }
       map = L.map('map').setView([30.741, 76.768], 15);  // CU CAMPUS
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
     }
-    initMap();
+    
+    if (L) {
+        initMap();
+    } else {
+        console.error("Leaflet (L) not loaded.");
+        showErr("Map could not be loaded.");
+    }
 
     onRealtimeCollection("trucks", trucks=>{
+      if (!map) return; 
       trucks.forEach(t=>{
         if(!markers[t.id]) {
           markers[t.id] = L.marker([t.lat, t.lon]).addTo(map).bindPopup(t.id);
@@ -173,46 +185,49 @@ function clearErr(){ errBox.style.display='none'; }
       });
     });
 
-    /* CREATE LISTING */
+    /* CREATE LISTING (CORRECTED) */
     document.getElementById("create").onclick = async ()=>{
       clearErr();
-      let t = type.value;
-      let q = parseFloat(qty.value) || 1;
-      let c = (city.value || "D").toUpperCase();
+      let t = typeEl.value;
+      let q = parseFloat(qtyEl.value) || 1;
+      let c = (cityEl.value || "D").toUpperCase();
       let ref = generateRefID(t,c);
 
       try {
-        status.textContent = "Creating...";
+        statusEl.textContent = "Creating..."; 
         await createTrash(ref,{
           ref, owner:userId, type:t, qty:q, city:c,
           status:"PEN",
           timeline:[{code:"PEN", at:new Date().toISOString()}]
         });
 
-        status.textContent = "Created "+ref;
-        qty.value = ""; city.value = "";
-        setTimeout(()=> status.textContent="",2000);
+        statusEl.textContent = "Created "+ref; 
+        qtyEl.value = ""; cityEl.value = ""; 
+        setTimeout(()=> statusEl.textContent="",2000); 
       }
       catch(e){
         showErr("Create failed: "+(e.message||e));
+        statusEl.textContent = ""; 
       }
     };
 
   } catch(e){
+    console.error("Init failed:", e);
     showErr("Init failed: "+(e.message||e));
   }
 })();
 
 /* --- AMAZON STYLE MODAL --- */
 window.showTimeline = function(refId){
-  import('./common.js').then(mod=>{
-    mod.getAll("trash").then(all=>{
-      const obj = all.find(x=>x.id===refId);
-      if(!obj) return;
+  common.getAll("trash").then(all=>{
+    const obj = all.find(x=>x.id===refId);
+    if(!obj) {
+        console.error("Could not find trash with refId:", refId);
+        return;
+    }
 
-      document.getElementById("modalBody").innerHTML = formatTimeline(obj.timeline);
-      document.getElementById("modalOverlay").style.display = "flex";
-    });
+    document.getElementById("modalBody").innerHTML = formatTimeline(obj.timeline);
+    document.getElementById("modalOverlay").style.display = "flex";
   });
 };
 

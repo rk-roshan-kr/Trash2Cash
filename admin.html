@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="style.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
-    /* small admin-only tweaks */
+    /* ... (all same CSS from style.css) ... */
     #adminMap { height:320px; border-radius:10px; margin-top:8px; border:1px solid #eee }
     .col { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start }
     .panel { flex:1; min-width:260px }
@@ -16,71 +16,128 @@
     .modal .box { background:#fff; padding:16px; border-radius:10px; width:95%; max-width:720px; max-height:80vh; overflow:auto }
     .muted-inline { color:var(--muted); font-size:13px }
     .small-action { background:transparent;border:0;color:var(--brand);cursor:pointer;font-weight:700 }
+    .small-action.danger { color: #e74c3c; }
+    .small-action:hover { text-decoration: underline; }
     .form-row { display:flex; gap:8px; align-items:center; margin-top:8px }
-    .form-row input{ padding:2px; border-radius:8px; border:1px solid #e6e6e9 }
+    .form-row input, .form-row select { padding:6px; border-radius:8px; border:1px solid #e6e6e9 }
+    .tabs { display:flex; gap:10px; border-bottom:2px solid #f4f4f4; margin-bottom:16px; padding-bottom:2px; }
+    .tab-btn { background: none; border: none; font-weight: 600; color: var(--muted); padding: 8px 16px; cursor: pointer; font-size: 14px; }
+    .tab-btn.active { color: var(--brand); border-bottom: 2px solid var(--brand); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(5px);} to { opacity:1; transform:translateY(0);} }
+    .search-box { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
+    @media (max-width: 768px) { .col { flex-direction: column; } .panel { min-width: 100%; } }
   </style>
 </head>
 <body>
   <header class="topbar"><div class="brand">TRASH 2 CASH — Admin</div></header>
-
   <main class="page-area">
     <div id="error" class="error" style="display:none"></div>
 
-    <div class="card">
-      <h3>Quick Controls</h3>
-      <div class="row">
-        <button id="btnSeed" class="primary">Seed demo data</button>
-        <button id="btnRefresh" class="primary">Refresh metrics</button>
-      </div>
+    <nav class="tabs">
+      <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
+      <button class="tab-btn" onclick="switchTab('users')">User Management</button>
+      <button class="tab-btn" onclick="switchTab('trash')">Trash Items</button>
+      <button class="tab-btn" onclick="switchTab('facilities')">Facilities</button>
+    </nav>
 
-      <div style="margin-top:12px" class="col">
-        <div class="panel">
-          <h4>Create Lot</h4>
-          <div class="form-row">
-            <select id="lotType"><option value="P">Plastic</option><option value="A">Paper</option><option value="M">Metal</option><option value="G">Glass</option><option value="X">Mixed</option></select>
-            <input id="lotCity" placeholder="City / area" />
-            <input id="lotTarget" placeholder="Target kg (e.g. 500)" type="number" />
-            
+    <section id="tab-dashboard" class="tab-content active">
+      <div class="card">
+        <h3>Quick Controls</h3>
+        <div class="row">
+          <button id="btnSeed" class="primary">Seed demo data</button>
+          <button id="btnRefresh" class="primary">Refresh metrics</button>
+        </div>
+        <div class="col">
+          <div class="panel">
+            <h4>Create Lot</h4>
+            <div class="form-row">
+              <select id="lotType">
+                <option value="P">Plastic</option><option value="A">Paper</option><option value="M">Metal</option>
+                <option value="G">Glass</option><option value="X">Mixed</option>
+              </select>
+              <input id="lotCity" placeholder="City Code (e.g. CHD)" style="width:80px; text-transform:uppercase;" />
+              <input id="lotTarget" placeholder="Target kg" type="number" style="width:100px" />
+            </div>
+            <div class="form-row">
+              <label for="lot-duration" class="muted-inline">Bidding Duration (days):</label>
+              <input id="lot-duration" type="number" value="1" style="width:60px" />
+            </div>
+            <button id="btnCreateLot" class="primary">Create Lot</button>
           </div>
-          <button id="btnCreateLot" class="primary">Create Lot</button>
-          <div class="muted-inline">Created lots will appear in the Lots panel below.</div>
-        </div>
-
-        <div class="panel">
-          <h4>Stats Snapshot</h4>
-          <div class="kv">
-            <div><b>Users:</b> <span id="m-users">–</span></div>
-            <div><b>Trash docs:</b> <span id="m-trash">–</span></div>
-            <div><b>Lots:</b> <span id="m-lots">–</span></div>
-            <div><b>Trucks:</b> <span id="m-trucks">–</span></div>
+          <div class="panel">
+            <h4>Stats Snapshot</h4>
+            <div class="kv">
+              <div><b>Users:</b> <span id="m-users">–</span></div>
+              <div><b>Trash docs:</b> <span id="m-trash">–</span></div>
+              <div><b>Lots:</b> <span id="m-lots">–</span></div>
+              <div><b>Trucks:</b> <span id="m-trucks">–</span></div>
+              <div><b>Facilities:</b> <span id="m-facilities">–</span></div>
+            </div>
+            <div style="margin-top:8px"><b>Trash by type:</b> <div id="m-bytype" class="small"></div></div>
           </div>
-          <div style="margin-top:8px"><b>Trash by type:</b> <div id="m-bytype" class="small"></div></div>
         </div>
       </div>
-    </div>
-
-    <div class="card">
-      <h3>Dashboard</h3>
-      <div class="col">
-        <div class="panel">
-          <h4>Trucks (live)</h4>
-          <div id="adminMap">Loading map...</div>
-        </div>
-
-        <div class="panel">
-          <h4>Lots</h4>
-          <div id="lotsList">Loading lots...</div>
+      <div class="card">
+        <h3>Assign User Items to Lot (Pays 90%)</h3>
+        <div class="form-row">
+          <select id="userTrash" style="flex:2"><option value="">Select Trash Item (Status: SCN)</option></select>
+          <select id="lotSelect" style="flex:2"><option value="">Select Lot (Status: OPEN)</option></select>
+          <button id="btnAssignTrash" class="primary">Assign & Pay 90%</button>
         </div>
       </div>
-    </div>
+      <div class="card">
+        <h3>Live Operations</h3>
+        <div class="col">
+          <div class="panel"><h4>Trucks (live)</h4><div id="adminMap">Loading map...</div></div>
+          <div class="panel"><h4>Lots</h4><div id="lotsList">Loading lots...</div></div>
+        </div>
+      </div>
+    </section>
+    
+    <section id="tab-users" class="tab-content">
+      <div class="card">
+        <h3>User Registry</h3>
+        <input type="text" id="userSearch" class="search-box" placeholder="Search by Name, Email or ID..." />
+        <div id="usersListContainer">Loading users...</div>
+      </div>
+    </section>
 
-    <div class="card">
-      <h3>Recent Trash (10)</h3>
-      <div id="recent">Loading...</div>
-    </div>
+    <section id="tab-trash" class="tab-content">
+      <div class="card">
+        <h3>Trash Items</h3>
+        <div class="muted-inline" style="margin-bottom:10px">Listing recent 20 items</div>
+        <div id="recent">Loading...</div>
+      </div>
+    </section>
+
+    <section id="tab-facilities" class="tab-content">
+      <div class="card">
+        <h3>Create Sorting Facility</h3>
+        <div class="col">
+          <div class="panel">
+            <div class="form-row">
+              <input id="fac-id" placeholder="ID (e.g., S-CHD-1)" style="width:120px; text-transform:uppercase;">
+              <input id="fac-name" placeholder="Facility Name" style="flex: 2;">
+              <input id="fac-city" placeholder="City (e.g., CHD)" style="width:100px; text-transform:uppercase;">
+            </div>
+            <div class="form-row">
+              <input id="fac-lat" placeholder="Latitude (e.g., 30.745)" type="number">
+              <input id="fac-lon" placeholder="Longitude (e.g., 76.770)" type="number">
+            </div>
+            <button id="btn-create-facility" class="primary">Create Facility</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>All Facilities</h3>
+        <div id="facilities-list-container">Loading facilities...</div>
+      </div>
+    </section>
+
   </main>
 
-  <!-- modal: timeline -->
   <div id="modal" class="modal" aria-hidden="true">
     <div class="box">
       <div style="display:flex;justify-content:space-between;align-items:center">
@@ -92,19 +149,37 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
   <script type="module">
     import common from './common.js';
+    
+    // Import all functions from our powerful common.js
     const {
-      initApp, seedIfEmpty, metricsSnapshot, getAll,
-      onRealtimeCollection, formatTimeline, assignToLot, createLot
+      initApp, seedIfEmpty, metricsSnapshot, getAll, deleteDocument, setDocument,
+      onRealtimeCollection, formatTimeline, assignToLot, createLot,
+      dissolveLot, // <-- NEW
+      sellLot     // <-- NEW
     } = common;
+
     initApp();
 
     const err = document.getElementById('error');
     function showErr(t){ err.style.display='block'; err.textContent = t; }
     function clearErr(){ err.style.display='none'; err.textContent=''; }
 
-    // METRICS
+    window.switchTab = function(tabName) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById('tab-' + tabName).classList.add('active');
+      event.target.classList.add('active');
+      // Refresh data on tab switch
+      if(tabName === 'users') loadUsersList();
+      if(tabName === 'trash') loadRecent();
+      if(tabName === 'facilities') loadFacilitiesList();
+    }
+
+    // --- Data Loaders (Users, Trash, Facilities) ---
+    
     async function loadMetrics(){
       try {
         clearErr();
@@ -113,35 +188,151 @@
         document.getElementById('m-trash').textContent = m.trash;
         document.getElementById('m-lots').textContent = m.lots;
         document.getElementById('m-trucks').textContent = m.trucks;
+        document.getElementById('m-facilities').textContent = m.facilities || 0; // UPDATED
         document.getElementById('m-bytype').textContent = JSON.stringify(m.trashByType);
       } catch(e){ console.error(e); showErr('Metrics error: '+(e.message||e)); }
     }
-
-    // RECENT
+    
+    let allUsersCache = [];
+    async function loadUsersList(){
+      try {
+        const list = await getAll('users');
+        allUsersCache = list;
+        renderUsers(list);
+      } catch(e) { showErr('Users load failed: '+e.message); }
+    }
+    function renderUsers(list){
+      const container = document.getElementById('usersListContainer');
+      if(!list.length) { container.innerHTML = '<div class="muted-inline">No users found.</div>'; return; }
+      container.innerHTML = list.map(u => `
+        <div class="list-item">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-weight:bold">${u.name || 'Unknown'}</div>
+              <div class="muted-inline">ID: ${u.id} • Email: ${u.email || 'N/A'} • Role: ${u.role || 'User'}</div>
+            </div>
+            <button class="small-action danger" onclick="deleteItem('users', '${u.id}')">Delist User</button>
+          </div>
+        </div>
+      `).join('');
+    }
+    document.getElementById('userSearch').addEventListener('input', (e)=>{
+      const term = e.target.value.toLowerCase();
+      const filtered = allUsersCache.filter(u => 
+        (u.name && u.name.toLowerCase().includes(term)) || 
+        (u.email && u.email.toLowerCase().includes(term)) ||
+        u.id.toLowerCase().includes(term)
+      );
+      renderUsers(filtered);
+    });
+    
     async function loadRecent(){
       try {
         const all = await getAll('trash');
-        const sorted = all.sort((a,b)=> (b.createdAt||'').localeCompare(a.createdAt||'')).slice(0,10);
+        const sorted = all.sort((a,b)=> (b.createdAt||'').localeCompare(a.createdAt||'')).slice(0,20);
         document.getElementById('recent').innerHTML = sorted.map(x=>`
           <div class="list-item">
             <div style="display:flex;justify-content:space-between">
-              <div><b>${x.ref}</b> — ${x.type} — ${x.qty}kg — <span class="muted-inline">${x.owner}</span></div>
-              <div>
+              <div><b>${x.ref}</b> (${x.status}) — ${x.type} — ${x.qty}kg — <span class="muted-inline">${x.owner}</span></div>
+              <div style="display:flex; gap:10px;">
                 <button class="small-action" data-ref="${x.id||x.ref}" onclick="openTimeline(event)">Track</button>
+                <button class="small-action danger" onclick="deleteItem('trash', '${x.id}')">Delete</button>
               </div>
             </div>
           </div>
         `).join('') || '<div>No trash</div>';
       } catch(e){ console.error(e); showErr('Recent load failed: '+(e.message||e)); }
     }
-
-    // LOTS
-    function renderLots(list){
-      if(!list || list.length===0) {
-        document.getElementById('lotsList').innerHTML = '<div class="small">No lots</div>';
+    
+    const facilitiesListContainer = document.getElementById('facilities-list-container');
+    const facId = document.getElementById('fac-id');
+    const facName = document.getElementById('fac-name');
+    const facCity = document.getElementById('fac-city');
+    const facLat = document.getElementById('fac-lat');
+    const facLon = document.getElementById('fac-lon');
+    const btnCreateFacility = document.getElementById('btn-create-facility');
+    function renderFacilities(list) {
+      if(!list.length) {
+        facilitiesListContainer.innerHTML = '<div class="muted-inline">No facilities created yet.</div>';
         return;
       }
-      document.getElementById('lotsList').innerHTML = list.map(l=>`
+      facilitiesListContainer.innerHTML = list.map(f => `
+        <div class="list-item">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-weight:bold">${f.name || 'Unknown'} (ID: ${f.id})</div>
+              <div class="muted-inline">City: ${f.city || 'N/A'} • Coords: ${f.lat}, ${f.lon}</div>
+            </div>
+            <button class="small-action danger" onclick="deleteItem('facilities', '${f.id}')">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    }
+    async function loadFacilitiesList() {
+      try {
+        const list = await getAll('facilities');
+        renderFacilities(list);
+      } catch(e) {
+        showErr('Failed to load facilities: ' + e.message);
+        facilitiesListContainer.innerHTML = '<div class="error">Error loading list.</div>';
+      }
+    }
+    btnCreateFacility.onclick = async () => {
+      clearErr();
+      const id = facId.value.trim().toUpperCase();
+      const name = facName.value.trim();
+      const city = facCity.value.trim().toUpperCase();
+      const lat = parseFloat(facLat.value);
+      const lon = parseFloat(facLon.value);
+      if (!id || !name || !city || !lat || !lon) return showErr("Please fill in all facility fields.");
+      try {
+        await setDocument('facilities', id, {
+          id: id, name: name, city: city, lat: lat, lon: lon,
+          createdAt: new Date().toISOString()
+        });
+        alert(`Facility ${id} created successfully!`);
+        facId.value = ''; facName.value = ''; facCity.value = '';
+        facLat.value = ''; facLon.value = '';
+        loadFacilitiesList();
+      } catch(e) { showErr('Create facility failed: ' + e.message); }
+    };
+    
+    // --- LOTS RENDER (UPDATED) ---
+    function renderLots(list){
+      if(!list || list.length===0) {
+        document.getElementById('lotsList').innerHTML = '<div class="small">No lots</div>'; return;
+      }
+      document.getElementById('lotsList').innerHTML = list.map(l=> {
+        let actionButton = '';
+        let dissolveButton = '';
+        const now = new Date().getTime();
+        const bidEndTime = new Date(l.biddingEndsAt || 0).getTime();
+        
+        if (l.status === 'SLD') {
+          // 1. If Sold
+          actionButton = `<div class="muted-inline" style="color: #28a745; font-weight: 600;">Sold to ${l.winner}</div>`;
+        } else if (l.isFull) {
+          // 2. If Full (but not sold)
+          if (now > bidEndTime) {
+            // 2a. Bidding is over
+            actionButton = `<button class="primary" style="background: #28a745;" onclick="window.sellLotUI('${l.id}')">Process & Sell Lot</button>`;
+          } else {
+            // 2b. Bidding is active
+            actionButton = `<div class="muted-inline" style="font-weight: 600;">Bidding in progress...</div>`;
+          }
+          dissolveButton = `<button class="small-action danger" onclick="window.dissolveLotUI('${l.id}')">Dissolve</button>`;
+        } else {
+          // 3. If Open (and not full)
+          actionButton = `
+            <input placeholder="trashRef (SCN)" id="assign-${l.id}" style="width:110px;padding:6px;border-radius:6px;border:1px solid #eee"/>
+            <button class="primary" onclick="assignToLotUI('${l.id}')">Assign</button>
+          `;
+          if (l.items?.length > 0) {
+             dissolveButton = `<button class="small-action danger" onclick="window.dissolveLotUI('${l.id}')">Dissolve</button>`;
+          }
+        }
+
+        return `
         <div class="list-item">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <div>
@@ -150,52 +341,146 @@
             </div>
             <div style="text-align:right">
               <div><b>${l.isFull ? 'FULL' : (l.status||'OPEN')}</b></div>
-              <div style="margin-top:6px">
-                <input placeholder="trashRef" id="assign-${l.id}" style="width:110px;padding:6px;border-radius:6px;border:1px solid #eee"/>
-                <button class="primary" onclick="assignToLotUI('${l.id}')">Assign</button>
-              </div>
+              <div style="margin-top:6px">${dissolveButton}</div>
             </div>
           </div>
+          <div style="margin-top:6px">${actionButton}</div>
         </div>
-      `).join('');
+      `}).join('');
     }
 
-    // MAP
-    let map, markers = {};
-    function initMap(){
-      if(window.L == null) return;
-      map = L.map('adminMap').setView([30.737, 76.768], 14);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+    // --- ACTIONS (UPDATED) ---
+    
+    // NEW: Sell Lot UI Function
+    window.sellLotUI = async (lotId) => {
+      clearErr();
+      if (!confirm(`This will finalize the auction for ${lotId} and sell it to the highest bidder. Are you sure?`)) return;
+      
+      try {
+        const result = await sellLot(lotId);
+        alert(`Lot ${lotId} sold to ${result.winner} for ₹${result.winningBid}!`);
+      } catch (e) {
+        showErr("Sell failed: " + e.message);
+        console.error(e);
+      }
+    }
+    
+    // NEW: Dissolve Lot UI Function
+    window.dissolveLotUI = async (lotId) => {
+      clearErr();
+      if (!confirm(`Are you sure you want to dissolve lot ${lotId}? All items will be returned to 'SCN' (Sorted) status.`)) return;
+      try {
+        const count = await dissolveLot(lotId);
+        alert(`Successfully dissolved lot and returned ${count} items.`);
+      } catch (e) {
+        showErr("Failed to dissolve lot: " + e.message);
+      }
     }
 
-    // wire buttons
+    // Global Delete
+    window.deleteItem = async function(collection, id) {
+      if(!confirm(`Are you sure you want to delete this item from ${collection}?`)) return;
+      try {
+        await deleteDocument(collection, id);
+        alert('Deleted successfully');
+        loadAll(); // Reload all data
+      } catch(e) { alert('Delete failed: ' + e.message); }
+    }
+
+    // Seed & Refresh
     document.getElementById('btnSeed').onclick = async ()=>{
       try { await seedIfEmpty(); alert('Seed done'); await loadAll(); }
       catch(e){ showErr('Seed failed: '+(e.message||e)); }
     };
     document.getElementById('btnRefresh').onclick = ()=> loadAll();
 
+    // Create Lot (UPDATED)
     document.getElementById('btnCreateLot').onclick = async ()=>{
       try {
         const type = document.getElementById('lotType').value;
-        const city = (document.getElementById('lotCity').value || 'D').toUpperCase();
+        let city = (document.getElementById('lotCity').value || 'CHD').toUpperCase();
         const target = parseFloat(document.getElementById('lotTarget').value) || 500;
-        const id = await createLot({ type, city, target });
-        alert('Created lot ' + id);
+        const duration = parseFloat(document.getElementById('lot-duration').value) || 1; // NEW
+        
+        const suffix = Math.floor(100 + Math.random() * 900);
+        const structuredId = `LOT-${city}-${type}-${suffix}`;
+
+        const finalId = await createLot({ 
+          id: structuredId, 
+          type, 
+          city, 
+          target, 
+          biddingDurationDays: duration // Pass duration to backend
+        });
+        
+        alert('Created lot: ' + (finalId || structuredId));
       } catch(e){ showErr('Create lot failed: '+(e.message||e)); }
     };
 
-    async function assignToLotUI(lotId){
+    // Assign Logic (UPDATED)
+    window.assignToLotUI = async function(lotId){
       try {
-        const ref = document.getElementById('assign-'+lotId).value.trim();
-        if(!ref) return alert('Enter trash ref to assign');
+        const ref = document.getElementById('assign-'+lotId).value.trim().toUpperCase();
+        if(!ref) return alert("Please enter a trash Ref ID.");
         await assignToLot(lotId, ref);
-        alert('Assigned ' + ref + ' → ' + lotId);
+        alert(`Assigned ${ref} to ${lotId}. User has been paid 90%.`);
         document.getElementById('assign-'+lotId).value = '';
+        loadUnassignedTrash(); // Refresh dropdown
       } catch(e){ console.error(e); showErr('Assign failed: '+(e.message||e)); }
     }
 
-    // modal timeline
+    // Panel Assign Button (UPDATED)
+    document.getElementById('btnAssignTrash').onclick = async () => {
+      try {
+        const trashRef = document.getElementById('userTrash').value;
+        const lotId = document.getElementById('lotSelect').value;
+        if (!trashRef || !lotId) return alert('Please select both a trash item and a lot.');
+        await assignToLot(lotId, trashRef);
+        alert(`Assigned ${trashRef} to ${lotId}. User has been paid 90%.`);
+        loadUnassignedTrash(); loadLots(); // Refresh dropdowns
+      } catch (e) { showErr('Failed to assign: ' + (e.message || e)); }
+    };
+
+    // Load Dropdowns (UPDATED)
+    async function loadUnassignedTrash() {
+      const trash = await getAll('trash');
+      const unassigned = trash.filter(t => t.status === 'SCN'); // <-- LOOKS FOR SCN
+      document.getElementById('userTrash').innerHTML = '<option value="">Select Trash Item (Status: SCN)</option>' +
+        unassigned.map(t => `<option value="${t.ref}">${t.ref} — ${t.type} — ${t.qty}kg</option>`).join('');
+    }
+    async function loadLots() {
+      const lots = await getAll('lots');
+      const openLots = lots.filter(l => l.status === 'OPEN'); // <-- LOOKS FOR OPEN
+      document.getElementById('lotSelect').innerHTML = '<option value="">Select Lot (Status: OPEN)</option>' +
+        openLots.map(l => `<option value="${l.id}">${l.id} (${l.city})</option>`).join('');
+    }
+
+    // --- MAP & TIMELINE ---
+    let map, markers = {};
+    function initMap(){
+      if(window.L == null) return;
+      map = L.map('adminMap').setView([30.737, 76.768], 14);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+    }
+    // Realtime Listeners
+    onRealtimeCollection('lots', (arr)=>{
+      renderLots(arr.map(x=>({ id: x.id, ...x }))); // Re-render lot list
+      document.getElementById('m-lots').textContent = arr.length;
+    });
+    onRealtimeCollection('trucks', (arr)=>{
+      if(!map && window.L) initMap();
+      if(!map) return;
+      arr.forEach(t=>{
+        if(!t.id) return;
+        if(!markers[t.id]) {
+          markers[t.id] = L.marker([t.lat, t.lon]).addTo(map).bindPopup(`<b>${t.id}</b>`);
+        } else {
+          markers[t.id].setLatLng([t.lat, t.lon]);
+        }
+      });
+      document.getElementById('m-trucks').textContent = arr.length;
+    });
+    // Modal Logic
     const modal = document.getElementById('modal');
     window.openTimeline = async function(ev){
       const ref = ev.currentTarget.dataset.ref;
@@ -211,34 +496,15 @@
     };
     document.getElementById('closeModal').onclick = ()=>{ modal.style.display='none'; modal.setAttribute('aria-hidden','true'); };
 
-    // live listeners for lots/trucks
-    onRealtimeCollection('lots', (arr)=>{
-      // map lots into nicer objects: include id property (doc id)
-      renderLots(arr.map(x=>({ id: x.id, ...x })));
-      document.getElementById('m-lots').textContent = arr.length;
-    });
-
-    onRealtimeCollection('trucks', (arr)=>{
-      // update map markers
-      if(!map && window.L) initMap();
-      arr.forEach(t=>{
-        if(!t.id) return;
-        if(!markers[t.id]) {
-          markers[t.id] = L.marker([t.lat, t.lon]).addTo(map).bindPopup(`<b>${t.id}</b>`);
-        } else {
-          markers[t.id].setLatLng([t.lat, t.lon]);
-        }
-      });
-      document.getElementById('m-trucks').textContent = arr.length;
-    });
-
-    // initial load
+    // --- INIT ---
     async function loadAll(){
       await loadMetrics();
       await loadRecent();
-      // lots count will be updated by realtime listener
+      await loadUnassignedTrash();
+      await loadLots();
+      await loadUsersList();
+      await loadFacilitiesList();
     }
-
     (function start(){
       if(window.L) initMap();
       loadAll();

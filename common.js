@@ -2,7 +2,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
 import {
   getFirestore, collection, doc, setDoc, addDoc, getDoc, getDocs,
-  updateDoc, onSnapshot, serverTimestamp, query, where
+  updateDoc, deleteDoc, 
+  onSnapshot, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -16,6 +17,12 @@ const firebaseConfig = {
 
 let app = null, db = null;
 
+// --- NEW: Pricing Chart ---
+// This is now the "base value" of trash
+export const PRICING_CHART = {
+  P: 10, A: 5, M: 50, G: 8, E: 15, X: 2 
+};
+
 export function initApp(){
   if(db) return db;
   app = initializeApp(firebaseConfig);
@@ -27,24 +34,16 @@ export function initApp(){
 /* Type & status helpers for UI */
 export function fullTypeName(code){
   return {
-    P: "Plastic",
-    A: "Paper",
-    M: "Metal",
-    G: "Glass",
-    E: "E-waste",
-    C: "Cardboard",
-    X: "Mixed"
+    P: "Plastic", A: "Paper", M: "Metal", G: "Glass",
+    E: "E-waste", C: "Cardboard", X: "Mixed",
+    PET: "Plastic", PPR: "Paper", MET: "Metal", GLS: "Glass", ORG: "Organic" // Aliases
   }[code] || code;
 }
 
 export function fullStatusName(code){
   return {
-    PEN: "Pending Pickup",
-    COL: "Collected by Govt Worker",
-    SCN: "Sorted at Center",
-    ASG: "Assigned to Lot",
-    FUL: "Lot Full",
-    SLD: "Sold to Company"
+    PEN: "Pending Pickup", COL: "Collected by Govt Worker", SCN: "Sorted at Center",
+    ASG: "Assigned to Lot", FUL: "Lot Full", SLD: "Sold to Company"
   }[code] || code;
 }
 
@@ -65,8 +64,7 @@ export function formatTimeline(arr = []){
 export function generateRefID(type = "X", city = "D"){
   const d = new Date();
   return (
-    type +
-    city +
+    type + city +
     d.getDate().toString(36).toUpperCase() +
     d.getHours().toString(36).toUpperCase() +
     d.getMinutes().toString(36).toUpperCase() +
@@ -77,55 +75,56 @@ export function generateRefID(type = "X", city = "D"){
 /* Seed demo data (idempotent) */
 export async function seedIfEmpty(){
   initApp();
-  try {
-    // users
-    const uCol = collection(db, "users");
-    const uDocs = await getDocs(uCol);
-    if (uDocs.empty) {
-      const users = [
-        { id: "user1", name: "Anita", wallet: 0 },
-        { id: "user2", name: "Rahul", wallet: 0 },
-        { id: "user3", name: "Neha", wallet: 0 },
-        { id: "user4", name: "Sandeep", wallet: 0 },
-        { id: "user5", name: "Priya", wallet: 0 }
-      ];
-      for (const u of users) await setDoc(doc(db, "users", u.id), u);
-      console.log("common.js: seeded users");
-    }
-
-    // trucks
-    const tc = collection(db, "trucks");
-    const tDocs = await getDocs(tc);
-    if (tDocs.empty) {
-      const base = [30.737, 76.768]; // default area if you want
-      for (let i = 1; i <= 5; i++) {
-        await addDoc(tc, {
-          id: `T${i}`,
-          lat: base[0] + (Math.random() - 0.5) * 0.01,
-          lon: base[1] + (Math.random() - 0.5) * 0.01,
+  // ... (Seeding logic is unchanged)
+  // users
+  const uCol = collection(db, "users");
+  const uDocs = await getDocs(uCol);
+  if (uDocs.empty) {
+    const users = [
+      { id: "user1", name: "Anita", email: "user1@demo.com", role: "user", wallet: 0 },
+      { id: "user2", name: "Rahul", email: "user2@demo.com", role: "user", wallet: 0 },
+      { id: "user3", name: "Neha", email: "user3@demo.com", role: "user", wallet: 0 },
+      { id: "gov1", name: "Govt. Worker", email: "gov1@demo.com", role: "gov", wallet: 0 },
+      { id: "co1", name: "Recycle Inc.", email: "co1@demo.com", role: "company", wallet: 0 }
+    ];
+    for (const u of users) await setDoc(doc(db, "users", u.id), u);
+    console.log("common.js: seeded users");
+  }
+  // trucks
+  const tc = collection(db, "trucks");
+  const tDocs = await getDocs(tc);
+  if (tDocs.empty) {
+    console.log("common.js: Seeding trucks...");
+    const hubs = {
+      CHD: [30.737, 76.768], KHA: [30.74, 76.65],
+      DEL: [28.613, 77.209], MUM: [19.076, 72.877]
+    };
+    let truckCounter = 1;
+    for (const [hubName, baseCoords] of Object.entries(hubs)) {
+      for (let i = 1; i <= 3; i++) {
+        const truckId = `${hubName}-T${i}`;
+        await setDoc(doc(db, "trucks", truckId), {
+          id: truckId, 
+          lat: baseCoords[0] + (Math.random() - 0.5) * 0.05,
+          lon: baseCoords[1] + (Math.random() - 0.5) * 0.05,
           updated: new Date().toISOString()
         });
+        truckCounter++;
       }
-      console.log("common.js: seeded trucks");
     }
-
-    // some trash sample
-    const trashCol = collection(db, "trash");
-    const trashDocs = await getDocs(trashCol);
-    if (trashDocs.empty) {
-      const samples = [
-        { ref: generateRefID("P","D"), owner:"user1", type:"P", qty:3, city:"D", status:"PEN", timeline:[{code:"PEN", at:new Date().toISOString()}], createdAt:new Date().toISOString() },
-        { ref: generateRefID("A","D"), owner:"user2", type:"A", qty:1.5, city:"D", status:"PEN", timeline:[{code:"PEN", at:new Date().toISOString()}], createdAt:new Date().toISOString() },
-        { ref: generateRefID("M","D"), owner:"user3", type:"M", qty:2.2, city:"D", status:"PEN", timeline:[{code:"PEN", at:new Date().toISOString()}], createdAt:new Date().toISOString() }
-      ];
-      for(const s of samples) await setDoc(doc(db, "trash", s.ref), s);
-      console.log("common.js: seeded trash samples");
-    }
-
-    // lots default empty (optional)
-  } catch (err) {
-    console.error("common.js: seedIfEmpty error", err);
-    throw err;
+    console.log(`common.js: seeded ${truckCounter - 1} trucks`);
+  }
+  // trash
+  const trashCol = collection(db, "trash");
+  const trashDocs = await getDocs(trashCol);
+  if (trashDocs.empty) {
+    const samples = [
+      { ref: generateRefID("P","D"), owner:"user1", type:"P", qty:3, city:"D", status:"PEN", timeline:[{code:"PEN", at:new Date().toISOString()}], createdAt:new Date().toISOString() },
+      { ref: generateRefID("A","D"), owner:"user2", type:"A", qty:1.5, city:"D", status:"PEN", timeline:[{code:"PEN", at:new Date().toISOString()}], createdAt:new Date().toISOString() },
+      { ref: generateRefID("M","D"), owner:"user3", type:"M", qty:2.2, city:"D", status:"PEN", timeline:[{code:"PEN", at:new Date().toISOString()}], createdAt:new Date().toISOString() }
+    ];
+    for(const s of samples) await setDoc(doc(db, "trash", s.ref), s);
+    console.log("common.js: seeded trash samples");
   }
 }
 
@@ -166,17 +165,55 @@ export async function createTrash(ref, payload){
   return data;
 }
 
-/* Create a lot (admin) */
-export async function createLot({ type="X", city="D", target=500 }){
+/* Creates or overwrites a doc with a specific ID (for auth.html sign-up) */
+export async function setDocument(collectionName, docId, data) {
   initApp();
-  const col = collection(db, "lots");
-  const docRef = await addDoc(col, {
-    type, city, target, weight:0, items:[], isFull:false, createdAt: new Date().toISOString(), status: "OPEN", bids:[]
-  });
-  return docRef.id;
+  try {
+    const docRef = doc(db, collectionName, docId);
+    await setDoc(docRef, data, { merge: true });
+    return true;
+  } catch (e) {
+    console.error("Error setting document: ", e);
+    throw e;
+  }
 }
 
-/* Assign a single trash item to a lot (updates lot and trash) */
+/* Deletes a document by its ID (for admin.html) */
+export async function deleteDocument(collectionName, docId) {
+  initApp();
+  const docRef = doc(db, collectionName, docId);
+  await deleteDoc(docRef);
+}
+
+/* --- UPDATED: createLot (Now includes bidding timer) --- */
+export async function createLot(payload){
+  initApp();
+  const { id, type = "X", city = "D", target = 500, biddingDurationDays = 1 } = payload;
+  
+  // Calculate the bidding end time
+  const createdAt = new Date();
+  const biddingEndsAt = new Date(createdAt.getTime() + (biddingDurationDays * 24 * 60 * 60 * 1000));
+  
+  const data = {
+    type, city, target, 
+    weight: 0, items: [], isFull: false, 
+    createdAt: createdAt.toISOString(), 
+    biddingEndsAt: biddingEndsAt.toISOString(), // NEW FIELD
+    status: "OPEN", bids: []
+  };
+
+  if (id) {
+    const docRef = doc(db, "lots", id);
+    await setDoc(docRef, { ...data, id: id });
+    return id;
+  } else {
+    const col = collection(db, "lots");
+    const docRef = await addDoc(col, data);
+    return docRef.id;
+  }
+}
+
+/* --- UPDATED: assignToLot (Now pays remaining 90%) --- */
 export async function assignToLot(lotID, trashRef){
   initApp();
   const lotRef = doc(db, "lots", lotID);
@@ -189,36 +226,164 @@ export async function assignToLot(lotID, trashRef){
   if(!trashSnap.exists()) throw new Error("Trash not found");
 
   const t = trashSnap.data();
+  
+  // --- 1. PAYOUT LOGIC (Remaining 90%) ---
+  if (t.owner && t.status === 'SCN') { // Only pay if it was just sorted
+    const itemBaseValue = (PRICING_CHART[t.type] || 0) * (t.qty || 0);
+    const remainingPayout = itemBaseValue * 0.90; // Pay the other 90%
+    
+    if (remainingPayout > 0) {
+      const userRef = doc(db, "users", t.owner);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        await updateDoc(userRef, {
+          wallet: (userData.wallet || 0) + remainingPayout
+        });
+      } else {
+        console.warn(`Cannot pay 90% to ${t.owner}: user not found.`);
+      }
+    }
+  }
+  
+  // --- 2. Update Lot ---
   const newItems = [...(lot.items || []), t.ref || trashSnap.id];
   const newWeight = (lot.weight || 0) + (t.qty || 0);
   const isFull = newWeight >= (lot.target || 999999);
-
   await updateDoc(lotRef, { items: newItems, weight: newWeight, isFull, status: isFull ? "FUL" : (lot.status || "OPEN") });
 
-  // update trash
+  // --- 3. Update Trash Item ---
   const tl = t.timeline || [];
   tl.push({ code: "ASG", lot: lotID, at: new Date().toISOString() });
   await updateDoc(trashRefDoc, { status: "ASG", timeline: tl, assignedLot: lotID, updatedAt: new Date().toISOString() });
 
-  // if lot just became full, set fullAt
   if(isFull) {
     await updateDoc(lotRef, { fullAt: new Date().toISOString() });
   }
-
   return true;
 }
 
+/* --- NEW: dissolveLot --- */
+export async function dissolveLot(lotId) {
+  initApp();
+  const lotRef = doc(db, "lots", lotId);
+  const lotSnap = await getDoc(lotRef);
+  if (!lotSnap.exists()) throw new Error("Lot not found");
+  
+  const lot = lotSnap.data();
+  const itemsToReturn = lot.items || [];
+  
+  if (lot.status === 'SLD') throw new Error("Cannot dissolve a lot that is already sold.");
+
+  // Create all promises to update trash items
+  const updatePromises = itemsToReturn.map(refId => {
+    const trashRef = doc(db, "trash", refId);
+    return updateDocField("trash", refId, (data) => {
+      if (!data) return; // Item was deleted, skip
+      data.status = "SCN"; // Set status back to "Sorted"
+      data.assignedLot = "";
+      // Remove the "Assigned to Lot" (ASG) timeline entry
+      if (data.timeline) {
+        data.timeline = data.timeline.filter(t => t.code !== "ASG");
+      }
+      return data;
+    });
+  });
+  
+  // Wait for all trash items to be updated
+  await Promise.all(updatePromises);
+  
+  // After all items are returned, delete the lot
+  await deleteDoc(lotRef);
+  
+  return itemsToReturn.length; // Return how many items were returned
+}
+
+// ADD THIS FUNCTION TO common.js
+
+/**
+ * Finalizes the sale of a lot after bidding has ended.
+ * 1. Finds the highest bidder.
+ * 2. Marks the lot as 'SLD' (Sold).
+ * 3. Stamps the lot with the 'winner' and 'soldPrice'.
+ * 4. Updates all trash items in the lot to 'SLD'.
+ * (Note: Payouts already happened at SCN and ASG steps).
+ * @param {string} lotId - The ID of the lot to sell.
+ * @returns {Promise<object>} An object with the winner and winning bid.
+ */
+export async function sellLot(lotId) {
+  initApp();
+  
+  const lotRef = doc(db, "lots", lotId);
+  const lotSnap = await getDoc(lotRef);
+
+  if (!lotSnap.exists()) {
+    throw new Error(`Lot not found: ${lotId}`);
+  }
+
+  const lot = lotSnap.data();
+
+  if (lot.status === 'SLD') {
+    throw new Error("This lot has already been sold.");
+  }
+
+  if (!lot.isFull) {
+    throw new Error("This lot is not full yet.");
+  }
+
+  // Check if bidding is over
+  const bidEndTime = new Date(lot.biddingEndsAt || 0).getTime();
+  if (new Date().getTime() < bidEndTime) {
+    throw new Error("Bidding has not ended for this lot.");
+  }
+
+  // Find the winner
+  if (!lot.bids || lot.bids.length === 0) {
+    throw new Error("Cannot sell lot: No bids have been placed.");
+  }
+
+  const winningBid = lot.bids.sort((a, b) => b.price - a.price)[0];
+  const winnerId = winningBid.company;
+  const winningPrice = winningBid.price;
+
+  // 1. Update the Lot document
+  await updateDoc(lotRef, {
+    status: "SLD",
+    winner: winnerId,
+    soldPrice: winningPrice
+  });
+
+  // 2. Update all associated trash items to 'SLD'
+  const itemsToUpdate = lot.items || [];
+  const updatePromises = itemsToUpdate.map(refId => {
+    return updateDocField("trash", refId, (data) => {
+      if (data) {
+        data.status = "SLD";
+        data.timeline.push({
+          code: "SLD",
+          at: new Date().toISOString(),
+          soldTo: winnerId,
+          price: winningPrice
+        });
+      }
+      return data;
+    });
+  });
+
+  await Promise.all(updatePromises);
+
+  return { winner: winnerId, winningBid: winningPrice, usersPaid: 0 }; // 0 users paid, as they were paid on SCN and ASG
+}
 /* Quick metrics snapshot (counts + by type) */
 export async function metricsSnapshot(){
   initApp();
+  // ... (Unchanged)
   const out = {};
-  const colNames = ["users","trash","lots","trucks","companies"];
+  const colNames = ["users","trash","lots","trucks","companies", "facilities"]; // Added facilities
   for(const name of colNames){
     const snap = await getDocs(collection(db, name));
     out[name] = snap.size;
   }
-
-  // trash by type
   const trashDocs = await getDocs(collection(db, "trash"));
   const byType = {};
   trashDocs.forEach(d => {
@@ -226,7 +391,6 @@ export async function metricsSnapshot(){
     byType[t] = (byType[t] || 0) + 1;
   });
   out.trashByType = byType;
-
   return out;
 }
 
@@ -238,10 +402,45 @@ export async function updateDocSimple(collectionName, docId, payload){
   return true;
 }
 
-/* default export convenience */
+/* Fetches documents from a collection, with an optional query. */
+export async function getDocsFromCol(collectionName, queryFn = null) {
+  initApp();
+  const colRef = collection(db, collectionName);
+  const q = queryFn ? queryFn(query(colRef)) : colRef;
+  const snap = await getDocs(q);
+  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+/* Safely updates a doc by reading it, modifying, and writing back. */
+export async function updateDocField(collectionName, docId, modifyCallback) {
+  initApp();
+  const docRef = doc(db, collectionName, docId);
+  try {
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) {
+      throw new Error(`Document not found: ${collectionName}/${docId}`);
+    }
+    let data = docSnap.data();
+    let newData = modifyCallback(data);
+    if (newData) { // Only update if callback returns data
+      await updateDoc(docRef, newData);
+    }
+    return true;
+  } catch (e) {
+    console.error("updateDocField failed: ", e);
+    throw e;
+  }
+}
+
+
+/* --- UPDATED default export convenience --- */
 export default {
   initApp, seedIfEmpty, onRealtimeCollection,
   getUser, getAll, createTrash, createLot, assignToLot,
   generateRefID, fullTypeName, fullStatusName, formatTimeline,
-  metricsSnapshot, updateDocSimple
+  metricsSnapshot, updateDocSimple,
+  setDocument, sellLot , deleteDocument,
+  getDocsFromCol, updateDocField,
+  dissolveLot, // <-- NEW EXPORT
+  PRICING_CHART // <-- NEW EXPORT
 };

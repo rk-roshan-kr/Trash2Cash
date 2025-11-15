@@ -1,174 +1,351 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Trash2Cash — Login</title>
-
-  <link rel="stylesheet" href="style.css"/>
-
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TRASH 2 CASH — Auth</title>
+  <link rel="stylesheet" href="style.css" />
   <style>
-    body {
-      background: linear-gradient(160deg, #ff6600 0%, #ff8c3a 40%, #fff 100%);
-      min-height:100vh;
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      padding:20px;
-    }
-
-    .login-wrapper {
-      background:#fff;
-      width:100%;
-      max-width:420px;
-      padding:26px;
-      border-radius:16px;
-      box-shadow:0 8px 30px rgba(0,0,0,0.18);
-      animation:pop .25s ease;
-    }
-
-    @keyframes pop {
-      from { transform:translateY(20px); opacity:0; }
-      to { transform:translateY(0); opacity:1; }
-    }
-
-    .hero-title {
-      font-size:26px;
-      font-weight:800;
-      text-align:center;
-      margin-bottom:6px;
-      color:#ff6600;
-    }
-    .hero-sub {
-      font-size:14px;
-      text-align:center;
-      color:#555;
-      margin-bottom:22px;
-    }
-
-    .input {
-      width:100%;
-      padding:12px;
-      border-radius:10px;
-      border:1px solid #e5e5e5;
-      margin-bottom:12px;
-      font-size:15px;
-    }
-
-    .btn-primary {
-      width:100%;
-      padding:12px;
-      background:#ff6600;
-      border:0;
-      color:#fff;
-      font-size:16px;
-      font-weight:700;
-      border-radius:10px;
-      cursor:pointer;
-      margin-top:4px;
-    }
-
-    .quick-login {
-      margin-top:18px;
-      text-align:center;
-    }
-    .quick-login button {
-      border:0;
-      padding:8px 14px;
-      border-radius:8px;
-      margin:4px;
-      background:#f5f5f5;
-      cursor:pointer;
-      font-weight:600;
-    }
-
-    .error {
-      background:#ffe3e3;
-      padding:10px;
-      border-radius:8px;
-      color:#a10000;
-      font-size:14px;
-      margin-bottom:10px;
-      display:none;
-    }
-
+    /* small override for login form width */
+    .auth-card { max-width:520px; margin:28px auto; }
+    .field { margin-bottom:10px; }
+    label{display:block;font-weight:600;margin-bottom:6px}
+    .hint{color:#666;font-size:13px;margin-top:6px}
+    
+    /* Message Boxes */
+    .error{color:#b91c1c;background:#fee2e2;padding:8px;border-radius:8px;margin-bottom:10px}
+    .success{color:#155724;background:#d4edda;padding:8px;border-radius:8px;margin-bottom:10px}
+    
+    /* Toggle Link */
+    .auth-link { margin-top: 16px; font-size: 14px; text-align: center; }
+    .auth-link a { cursor: pointer; color: var(--brand); text-decoration: underline; }
   </style>
 </head>
-
 <body>
+  <header class="topbar">
+    <div class="brand">TRASH 2 CASH</div>
+  </header>
 
-<div class="login-wrapper">
-  <div class="hero-title">Trash 2 Cash</div>
-  <div class="hero-sub">Turn waste into rewards. Log in to start recycling.</div>
+  <main class="page-area">
+    <div class="card auth-card">
 
-  <div id="err" class="error"></div>
+      <div id="loginView">
+        <h2>Prototype — Sign in</h2>
 
-  <input id="uid" class="input" placeholder="User ID (e.g. user1)" />
-  <input id="pwd" class="input" placeholder="Password" type="password" />
+        <div id="errorBoxLogin" style="display:none" class="error"></div>
 
-  <button id="loginBtn" class="btn-primary">Login</button>
+        <div class="field">
+          <label for="usernameLogin">Username or Email</label>
+          <input id="usernameLogin" placeholder="e.g. user1 or user1@demo.com" autocomplete="username" />
+        </div>
 
-  <div class="quick-login">
-    <div class="small" style="margin-bottom:6px;color:#777;">Demo Quick Login</div>
-    <button onclick="quick('user1')">user1</button>
-    <button onclick="quick('user2')">user2</button>
-    <button onclick="quick('admin')">Admin</button>
-  </div>
-</div>
+        <div class="field">
+          <label for="passwordLogin">Password</label>
+          <input id="passwordLogin" type="password" placeholder="password" autocomplete="current-password" />
+        </div>
 
-<script>
-/* FAKE PASSWORD SYSTEM (local) — can upgrade to Firebase Auth later */
-const USERS = {
-  "user1": "password123",
-  "user2": "password123",
-  "admin": "admin123"
-};
+        <div class="field">
+          <label for="roleSelLogin">Role (optional — will be validated against account)</label>
+          <select id="roleSelLogin">
+            <option value="">Auto (detect from username)</option>
+            <option value="user">User</option>
+            <option value="gov">Govt</option>
+            <option value="company">Company</option>
+          </select>
+        </div>
 
-function showErr(msg){
-  const e = document.getElementById("err");
-  e.style.display = "block";
-  e.textContent = msg;
-}
+        <div class="row" style="margin-top:8px">
+          <button id="btnLogin" class="primary">Sign in</button>
+          <button id="btnDemo" style="margin-left:8px">Fill demo (user1)</button>
+        </div>
 
-document.getElementById("loginBtn").onclick = function(){
-  const id = document.getElementById("uid").value.trim();
-  const pw = document.getElementById("pwd").value.trim();
+        <p class="hint">Demo accounts: user1/user2/user3 | gov1/gov2 | co1/co2 — password is <b>1234</b> for all.</p>
+        
+        <div class="auth-link">
+          Don't have an account? <a id="showSignUp">Sign up here</a>
+        </div>
+      </div>
 
-  if(!id || !pw){
-    return showErr("Please enter both User ID and Password.");
-  }
+      <div id="signupView" style="display:none;">
+        <h2>Create an Account</h2>
 
-  if(!USERS[id]){
-    return showErr("User does not exist.");
-  }
-  if(USERS[id] !== pw){
-    return showErr("Incorrect password.");
-  }
+        <div id="errorBoxSignup" style="display:none" class="error"></div>
+        <div id="successBox" style="display:none" class="success"></div>
 
-  // STORE SESSION
-  sessionStorage.setItem("t2c_id", id);
-  sessionStorage.setItem("t2c_role", id === "admin" ? "admin" : "user");
+        <div class="field">
+          <label for="usernameSignup">Username</label>
+          <input id="usernameSignup" placeholder="e.g. my-username" autocomplete="username" />
+        </div>
+        
+        <div class="field">
+          <label for="emailSignup">Email</label>
+          <input id="emailSignup" type="email" placeholder="e.g. user@example.com" autocomplete="email" />
+        </div>
 
-  // REDIRECT
-  if(id === "admin"){
-    location.href = "admin.html"; // (coming next)
-  } else {
-    location.href = "user.html";
-  }
-};
+        <div class="field">
+          <label for="passwordSignup">Password</label>
+          <input id="passwordSignup" type="password" placeholder="Create a password (min 4 chars)" autocomplete="new-password" />
+        </div>
 
-/* QUICK LOGIN */
-function quick(id){
-  sessionStorage.setItem("t2c_id", id);
-  sessionStorage.setItem("t2c_role", id === "admin" ? "admin" : "user");
+        <div class="field">
+          <label for="confirmPasswordSignup">Confirm Password</label>
+          <input id="confirmPasswordSignup" type="password" placeholder="Confirm your password" autocomplete="new-password" />
+        </div>
 
-  if(id === "admin"){
-    location.href = "admin.html";
-  } else {
-    location.href = "user.html";
-  }
-}
-</script>
+        <div class="field">
+          <label for="roleSelSignup">Select your role</label>
+          <select id="roleSelSignup">
+            <option value="user">User (I have trash)</option>
+            <option value="gov">Government (I manage trucks)</option>
+            <option value="company">Company (I buy lots)</option>
+          </select>
+        </div>
 
+        <div class="row" style="margin-top:8px">
+          <button id="btnSignUp" class="primary">Sign Up</button>
+        </div>
+        
+        <div class="auth-link">
+          Already have an account? <a id="showLogin">Login here</a>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script type="module">
+    // Import functions from common.js
+    import common from './common.js';
+    const { initApp, setDocument } = common;
+    
+    // Initialize Firebase
+    try {
+      initApp();
+    } catch (e) {
+      console.warn(e.message);
+    }
+  
+    // --- SHARED DATA ---
+    
+    // UPDATED: Added email to demo accounts
+    const CREDENTIALS = {
+      user1: { password: "1234", role: "user", email: "user1@demo.com" },
+      user2: { password: "1234", role: "user", email: "user2@demo.com" },
+      user3: { password: "1234", role: "user", email: "user3@demo.com" },
+      gov1: { password: "1234", role: "gov", email: "gov1@demo.com" },
+      gov2: { password: "1234", role: "gov", email: "gov2@demo.com" },
+      co1: { password: "1234", role: "company", email: "co1@demo.com" },
+      co2: { password: "1234", role: "company", email: "co2@demo.com" }
+    };
+
+    // --- VIEW TOGGLING ---
+    const loginView = document.getElementById('loginView');
+    const signupView = document.getElementById('signupView');
+    const showSignUp = document.getElementById('showSignUp');
+    const showLogin = document.getElementById('showLogin');
+
+    showSignUp.onclick = (e) => {
+      e.preventDefault();
+      loginView.style.display = 'none';
+      signupView.style.display = 'block';
+    };
+
+    showLogin.onclick = (e) => {
+      e.preventDefault();
+      signupView.style.display = 'none';
+      loginView.style.display = 'block';
+    };
+
+    // --- LOGIN LOGIC (UPDATED) ---
+    const errLogin = document.getElementById('errorBoxLogin');
+    const usernameLogin = document.getElementById('usernameLogin');
+    const passwordLogin = document.getElementById('passwordLogin');
+    const roleSelLogin = document.getElementById('roleSelLogin');
+    const btnLogin = document.getElementById('btnLogin');
+    const btnDemo = document.getElementById('btnDemo');
+
+    btnDemo.onclick = () => { 
+      usernameLogin.value='user1'; 
+      passwordLogin.value='1234'; 
+      roleSelLogin.value='user'; 
+    };
+
+    function showLoginError(text){
+      errLogin.style.display='block';
+      errLogin.textContent = text;
+    }
+    function clearLoginError(){
+      errLogin.style.display='none';
+      errLogin.textContent = '';
+    }
+
+    btnLogin.onclick = (e) => {
+      clearLoginError();
+      const loginInput_raw = (usernameLogin.value || '').trim();
+      const p = (passwordLogin.value || '').trim();
+      const forcedRole = roleSelLogin.value || '';
+
+      if(!loginInput_raw || !p) return showLoginError('Enter both username/email and password.');
+      
+      const loginInput = loginInput_raw.toLowerCase(); // Force lowercase for lookup
+
+      // Get custom users from localStorage
+      const customUsers = JSON.parse(localStorage.getItem('t2c_users')) || {};
+      
+      // Combine demo credentials with custom users
+      const ALL_CREDENTIALS = { ...CREDENTIALS, ...customUsers };
+
+      let record = null;
+      let actualUsername = null;
+
+      // 1. Check if loginInput is a username (a key in the object)
+      if (ALL_CREDENTIALS[loginInput]) {
+        record = ALL_CREDENTIALS[loginInput];
+        actualUsername = loginInput;
+      } else {
+        // 2. If not, check if loginInput is an email (iterate and find)
+        actualUsername = Object.keys(ALL_CREDENTIALS).find(username => 
+          ALL_CREDENTIALS[username].email === loginInput
+        );
+        if (actualUsername) {
+          record = ALL_CREDENTIALS[actualUsername];
+        }
+      }
+      
+      if(!record) return showLoginError(`User not found: ${loginInput_raw}. Try again or sign up.`);
+
+      if(p !== record.password) return showLoginError('Incorrect password.');
+
+      if(forcedRole && forcedRole !== record.role) return showLoginError('Selected role does not match the account role.');
+
+      // success
+      sessionStorage.setItem('t2c_role', record.role);
+      sessionStorage.setItem('t2c_id', actualUsername); // Store the actual username (key)
+
+      // redirect by role
+      if(record.role === 'user') window.location.href = 'user.html';
+      else if(record.role === 'gov') window.location.href = 'govt.html';
+      else if(record.role === 'company') window.location.href = 'company.html';
+      else { showLoginError('Unknown role.'); }
+    };
+
+    // allow Enter key to submit login
+    [usernameLogin, passwordLogin].forEach(el => {
+      el.addEventListener('keydown', ev => {
+        if(ev.key === 'Enter') btnLogin.click();
+      });
+    });
+
+
+    // --- SIGNUP LOGIC (UPDATED) ---
+    const errSignup = document.getElementById('errorBoxSignup');
+    const successBox = document.getElementById('successBox');
+    const usernameSignup = document.getElementById('usernameSignup');
+    const emailSignup = document.getElementById('emailSignup'); // New field
+    const passwordSignup = document.getElementById('passwordSignup');
+    const confirmPasswordSignup = document.getElementById('confirmPasswordSignup');
+    const roleSelSignup = document.getElementById('roleSelSignup');
+    const btnSignUp = document.getElementById('btnSignUp');
+
+    function showSignupMsg(el, text) {
+      el.style.display = 'block';
+      el.textContent = text;
+    }
+    function clearSignupMsgs(){
+      errSignup.style.display = 'none'; errSignup.textContent = '';
+      successBox.style.display = 'none'; successBox.textContent = '';
+    }
+
+    // Email validation helper
+    function isValidEmail(email) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+
+    btnSignUp.onclick = async (e) => { // now async
+      clearSignupMsgs();
+      btnSignUp.disabled = true;
+      btnSignUp.textContent = 'Creating...';
+
+      const u_raw = (usernameSignup.value || '').trim();
+      const e_raw = (emailSignup.value || '').trim();
+      const p = (passwordSignup.value || '').trim();
+      const cp = (confirmPasswordSignup.value || '').trim();
+      const role = roleSelSignup.value;
+
+      try {
+        // --- Validation ---
+        if(!u_raw || !p || !cp || !e_raw) throw new Error('Please fill in all fields.');
+        
+        const u = u_raw.toLowerCase();
+        const email = e_raw.toLowerCase();
+
+        if (!isValidEmail(email)) throw new Error('Please enter a valid email address.');
+        if(p !== cp) throw new Error('Passwords do not match.');
+        if(p.length < 4) throw new Error('Password must be at least 4 characters long.');
+
+        // --- Check for duplicates ---
+        const customUsers = JSON.parse(localStorage.getItem('t2c_users')) || {};
+        const ALL_CREDENTIALS = { ...CREDENTIALS, ...customUsers };
+
+        // 1. Check for duplicate username
+        if(ALL_CREDENTIALS[u]) {
+          throw new Error('This username is already taken. Please choose another.');
+        }
+        
+        // 2. Check for duplicate email
+        const emailExists = Object.values(ALL_CREDENTIALS).some(user => user.email === email);
+        if (emailExists) {
+          throw new Error('This email is already in use. Please log in.');
+        }
+        
+        // --- Success ---
+        
+        // 1. Create user in Firestore database
+        const newUser = {
+          id: u,
+          name: u_raw, // Store original casing for display
+          email: email, // Store the real, lowercase email
+          role: role,
+          wallet: 0,
+          createdAt: new Date().toISOString()
+        };
+        await setDocument('users', u, newUser);
+
+        // 2. Save to localStorage for login
+        customUsers[u] = { password: p, role: role, email: email }; // Save email here too
+        localStorage.setItem('t2c_users', JSON.stringify(customUsers));
+
+        showSignupMsg(successBox, 'Account created successfully! Please log in.');
+        
+        // Clear form
+        usernameSignup.value = '';
+        emailSignup.value = '';
+        passwordSignup.value = '';
+        confirmPasswordSignup.value = '';
+
+        // After 2.5 seconds, switch back to login view
+        setTimeout(() => {
+          signupView.style.display = 'none';
+          loginView.style.display = 'block';
+          clearSignupMsgs();
+        }, 2500);
+
+      } catch (err) {
+        // Show any error (from validation or Firestore)
+        showSignupMsg(errSignup, err.message);
+      } finally {
+        // Re-enable button
+        btnSignUp.disabled = false;
+        btnSignUp.textContent = 'Sign Up';
+      }
+    };
+
+    // allow Enter key to submit signup
+    [usernameSignup, emailSignup, passwordSignup, confirmPasswordSignup].forEach(el => {
+      el.addEventListener('keydown', ev => {
+        if(ev.key === 'Enter') btnSignUp.click();
+      });
+    });
+  </script>
 </body>
 </html>
