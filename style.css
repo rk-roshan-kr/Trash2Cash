@@ -1,22 +1,54 @@
-:root {
-  --brand: #ff6600;
-  --bg: #f6f6f8;
-  --card: #fff;
-  --muted: #6b7280;
-  --text: #111;
+/* style.css — shared simple theme (mobile first) */
+:root{--brand:#ff6600;--bg:#f6f6f8;--card:#fff;--muted:#666}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:#111;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+.col {
+  width: 100%;
 }
 
-*{box-sizing:border-box}
-body{margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
 .topbar{height:56px;background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid #eee}
 .brand{color:var(--brand);font-weight:700}
-.smalllink{font-size:13px;color:#666;text-decoration:none}
-.page-area{padding:12px;max-width:900px;margin:8px auto}
+.page-area{padding:12px;max-width:1100px;margin:12px auto}
 .card{background:var(--card);border-radius:12px;padding:12px;margin-bottom:12px;box-shadow:0 6px 18px rgba(15,15,15,0.03)}
 .row{display:flex;gap:8px;align-items:center}
-input,select,textarea{padding:10px;border-radius:8px;border:1px solid #e6e6e9;background:#fff;font-size:15px}
-button.primary{background:var(--brand);color:#fff;border:0;padding:8px 12px;border-radius:8px;font-weight:700}
-.list-item{padding:10px;border-radius:8px;background:#fbfbfd;border:1px solid #f0f0f2;margin-bottom:8px}
+input,select,button{padding:8px;border-radius:8px;border:1px solid #e6e6e9;background:#fff}
+button.primary{background:var(--brand);color:#fff;border:0;padding:10px 12px;border-radius:8px;font-weight:700}
 .small{font-size:13px;color:var(--muted)}
-.hint{color:#666;font-size:13px}
-@media(min-width:900px){ .page-area{padding:18px} .row{gap:12px} }
+.list-item{padding:10px;border-radius:8px;background:#fbfbfd;border:1px solid #f0f0f2;margin-bottom:8px}
+#map{height:320px;border-radius:10px}
+.error{background:#fee2e2;color:#8a1f11;padding:8px;border-radius:8px;margin-bottom:10px}
+.kv{display:flex;gap:12px;align-items:center}
+.kv b{min-width:140px}
+@media(min-width:900px){
+  .page-area{padding:18px}
+}
+/* ---------- Landing / Login styles (split-screen) ---------- */
+/* reuses root variables from main style.css */
+.split{display:flex;flex-direction:column-reverse;gap:18px}
+.hero,.login-card{width:100%}
+.hero{padding:28px;display:flex;flex-direction:column;gap:16px;align-items:flex-start}
+.hero h1{font-size:28px;margin:0;color:var(--brand)}
+.hero p{margin:0;color:var(--muted);max-width:560px}
+.cta-row{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+.mock-illustration{
+  background:linear-gradient(135deg, rgba(255,102,0,0.06), rgba(0,0,0,0.01));
+  border-radius:12px;padding:18px;width:100%;min-height:180px;display:flex;align-items:center;justify-content:center;
+  color:var(--brand);font-weight:700;font-size:16px;border:1px solid rgba(255,102,0,0.06)
+}
+@media(min-width:900px){
+  .split{flex-direction:row;align-items:stretch}
+  .hero{flex:1;padding:40px 40px 32px}
+  .login-card{width:420px;align-self:center;margin-right:40px}
+}
+.login{padding:18px;border-radius:12px;background:var(--card);box-shadow:0 8px 26px rgba(15,15,15,0.06)}
+.role-chips{display:flex;gap:8px;margin-bottom:10px}
+.chip{padding:8px 12px;border-radius:999px;border:1px solid #eee;cursor:pointer;background:#fff}
+.chip.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+.muted-note{font-size:13px;color:var(--muted);margin-top:8px}
+.quick-list{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.quick-btn{background:#fafafa;border:1px dashed #eee;padding:8px 10px;border-radius:8px;cursor:pointer}
+.brand-sub{font-size:13px;color:var(--muted)}
+

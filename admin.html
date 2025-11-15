@@ -1,0 +1,249 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Trash2Cash — Admin</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    /* small admin-only tweaks */
+    #adminMap { height:320px; border-radius:10px; margin-top:8px; border:1px solid #eee }
+    .col { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start }
+    .panel { flex:1; min-width:260px }
+    .lot-meta { font-size:13px; color:var(--muted); margin-top:6px }
+    .modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background: rgba(0,0,0,0.5); z-index:1200 }
+    .modal .box { background:#fff; padding:16px; border-radius:10px; width:95%; max-width:720px; max-height:80vh; overflow:auto }
+    .muted-inline { color:var(--muted); font-size:13px }
+    .small-action { background:transparent;border:0;color:var(--brand);cursor:pointer;font-weight:700 }
+    .form-row { display:flex; gap:8px; align-items:center; margin-top:8px }
+    .form-row input{ padding:2px; border-radius:8px; border:1px solid #e6e6e9 }
+  </style>
+</head>
+<body>
+  <header class="topbar"><div class="brand">TRASH 2 CASH — Admin</div></header>
+
+  <main class="page-area">
+    <div id="error" class="error" style="display:none"></div>
+
+    <div class="card">
+      <h3>Quick Controls</h3>
+      <div class="row">
+        <button id="btnSeed" class="primary">Seed demo data</button>
+        <button id="btnRefresh" class="primary">Refresh metrics</button>
+      </div>
+
+      <div style="margin-top:12px" class="col">
+        <div class="panel">
+          <h4>Create Lot</h4>
+          <div class="form-row">
+            <select id="lotType"><option value="P">Plastic</option><option value="A">Paper</option><option value="M">Metal</option><option value="G">Glass</option><option value="X">Mixed</option></select>
+            <input id="lotCity" placeholder="City / area" />
+            <input id="lotTarget" placeholder="Target kg (e.g. 500)" type="number" />
+            
+          </div>
+          <button id="btnCreateLot" class="primary">Create Lot</button>
+          <div class="muted-inline">Created lots will appear in the Lots panel below.</div>
+        </div>
+
+        <div class="panel">
+          <h4>Stats Snapshot</h4>
+          <div class="kv">
+            <div><b>Users:</b> <span id="m-users">–</span></div>
+            <div><b>Trash docs:</b> <span id="m-trash">–</span></div>
+            <div><b>Lots:</b> <span id="m-lots">–</span></div>
+            <div><b>Trucks:</b> <span id="m-trucks">–</span></div>
+          </div>
+          <div style="margin-top:8px"><b>Trash by type:</b> <div id="m-bytype" class="small"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Dashboard</h3>
+      <div class="col">
+        <div class="panel">
+          <h4>Trucks (live)</h4>
+          <div id="adminMap">Loading map...</div>
+        </div>
+
+        <div class="panel">
+          <h4>Lots</h4>
+          <div id="lotsList">Loading lots...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Recent Trash (10)</h3>
+      <div id="recent">Loading...</div>
+    </div>
+  </main>
+
+  <!-- modal: timeline -->
+  <div id="modal" class="modal" aria-hidden="true">
+    <div class="box">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 id="modalTitle">Timeline</h3>
+        <button id="closeModal" class="small">Close</button>
+      </div>
+      <div id="modalBody" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module">
+    import common from './common.js';
+    const {
+      initApp, seedIfEmpty, metricsSnapshot, getAll,
+      onRealtimeCollection, formatTimeline, assignToLot, createLot
+    } = common;
+    initApp();
+
+    const err = document.getElementById('error');
+    function showErr(t){ err.style.display='block'; err.textContent = t; }
+    function clearErr(){ err.style.display='none'; err.textContent=''; }
+
+    // METRICS
+    async function loadMetrics(){
+      try {
+        clearErr();
+        const m = await metricsSnapshot();
+        document.getElementById('m-users').textContent = m.users;
+        document.getElementById('m-trash').textContent = m.trash;
+        document.getElementById('m-lots').textContent = m.lots;
+        document.getElementById('m-trucks').textContent = m.trucks;
+        document.getElementById('m-bytype').textContent = JSON.stringify(m.trashByType);
+      } catch(e){ console.error(e); showErr('Metrics error: '+(e.message||e)); }
+    }
+
+    // RECENT
+    async function loadRecent(){
+      try {
+        const all = await getAll('trash');
+        const sorted = all.sort((a,b)=> (b.createdAt||'').localeCompare(a.createdAt||'')).slice(0,10);
+        document.getElementById('recent').innerHTML = sorted.map(x=>`
+          <div class="list-item">
+            <div style="display:flex;justify-content:space-between">
+              <div><b>${x.ref}</b> — ${x.type} — ${x.qty}kg — <span class="muted-inline">${x.owner}</span></div>
+              <div>
+                <button class="small-action" data-ref="${x.id||x.ref}" onclick="openTimeline(event)">Track</button>
+              </div>
+            </div>
+          </div>
+        `).join('') || '<div>No trash</div>';
+      } catch(e){ console.error(e); showErr('Recent load failed: '+(e.message||e)); }
+    }
+
+    // LOTS
+    function renderLots(list){
+      if(!list || list.length===0) {
+        document.getElementById('lotsList').innerHTML = '<div class="small">No lots</div>';
+        return;
+      }
+      document.getElementById('lotsList').innerHTML = list.map(l=>`
+        <div class="list-item">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <b>${l.id}</b> • ${l.type} • <span class="muted-inline">${l.city}</span>
+              <div class="lot-meta">${(l.weight||0)} / ${l.target} kg • Items: ${(l.items||[]).length}</div>
+            </div>
+            <div style="text-align:right">
+              <div><b>${l.isFull ? 'FULL' : (l.status||'OPEN')}</b></div>
+              <div style="margin-top:6px">
+                <input placeholder="trashRef" id="assign-${l.id}" style="width:110px;padding:6px;border-radius:6px;border:1px solid #eee"/>
+                <button class="primary" onclick="assignToLotUI('${l.id}')">Assign</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // MAP
+    let map, markers = {};
+    function initMap(){
+      if(window.L == null) return;
+      map = L.map('adminMap').setView([30.737, 76.768], 14);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+    }
+
+    // wire buttons
+    document.getElementById('btnSeed').onclick = async ()=>{
+      try { await seedIfEmpty(); alert('Seed done'); await loadAll(); }
+      catch(e){ showErr('Seed failed: '+(e.message||e)); }
+    };
+    document.getElementById('btnRefresh').onclick = ()=> loadAll();
+
+    document.getElementById('btnCreateLot').onclick = async ()=>{
+      try {
+        const type = document.getElementById('lotType').value;
+        const city = (document.getElementById('lotCity').value || 'D').toUpperCase();
+        const target = parseFloat(document.getElementById('lotTarget').value) || 500;
+        const id = await createLot({ type, city, target });
+        alert('Created lot ' + id);
+      } catch(e){ showErr('Create lot failed: '+(e.message||e)); }
+    };
+
+    async function assignToLotUI(lotId){
+      try {
+        const ref = document.getElementById('assign-'+lotId).value.trim();
+        if(!ref) return alert('Enter trash ref to assign');
+        await assignToLot(lotId, ref);
+        alert('Assigned ' + ref + ' → ' + lotId);
+        document.getElementById('assign-'+lotId).value = '';
+      } catch(e){ console.error(e); showErr('Assign failed: '+(e.message||e)); }
+    }
+
+    // modal timeline
+    const modal = document.getElementById('modal');
+    window.openTimeline = async function(ev){
+      const ref = ev.currentTarget.dataset.ref;
+      try {
+        const all = await getAll('trash');
+        const obj = all.find(x => x.id === ref || x.ref === ref);
+        if(!obj) return alert('Item not found: ' + ref);
+        document.getElementById('modalTitle').textContent = `Timeline — ${obj.ref}`;
+        document.getElementById('modalBody').innerHTML = formatTimeline(obj.timeline || []);
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden','false');
+      } catch(e){ showErr('Open timeline failed: '+(e.message||e)); }
+    };
+    document.getElementById('closeModal').onclick = ()=>{ modal.style.display='none'; modal.setAttribute('aria-hidden','true'); };
+
+    // live listeners for lots/trucks
+    onRealtimeCollection('lots', (arr)=>{
+      // map lots into nicer objects: include id property (doc id)
+      renderLots(arr.map(x=>({ id: x.id, ...x })));
+      document.getElementById('m-lots').textContent = arr.length;
+    });
+
+    onRealtimeCollection('trucks', (arr)=>{
+      // update map markers
+      if(!map && window.L) initMap();
+      arr.forEach(t=>{
+        if(!t.id) return;
+        if(!markers[t.id]) {
+          markers[t.id] = L.marker([t.lat, t.lon]).addTo(map).bindPopup(`<b>${t.id}</b>`);
+        } else {
+          markers[t.id].setLatLng([t.lat, t.lon]);
+        }
+      });
+      document.getElementById('m-trucks').textContent = arr.length;
+    });
+
+    // initial load
+    async function loadAll(){
+      await loadMetrics();
+      await loadRecent();
+      // lots count will be updated by realtime listener
+    }
+
+    (function start(){
+      if(window.L) initMap();
+      loadAll();
+    })();
+
+  </script>
+</body>
+</html>

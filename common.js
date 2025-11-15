@@ -1,22 +1,8 @@
-// common.js
-// Put this file in the same folder as your html files.
-// Usage: import { initApp, generateRefID, seedIfEmpty, onRealtimeCollection, createTrash, getUser } from './common.js';
-
+// common.js — shared Firebase + helpers (modular v12)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
 import {
-  // getFirestore,
-  initializeFirestore,
-  collection,
-  doc,
-  setDoc,
-  addDoc,
-  getDoc,
-  getDocs,
-  onSnapshot,
-  serverTimestamp,
-  updateDoc,
-  query,
-  where,
+  getFirestore, collection, doc, setDoc, addDoc, getDoc, getDocs,
+  updateDoc, onSnapshot, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -28,205 +14,234 @@ const firebaseConfig = {
   appId: "1:630127672722:web:7c0b83248f13b4a23f154b"
 };
 
-let db = null;
-// Realtime mode control: 'stream' | 'poll' | 'hybrid'
-let REALTIME_MODE = 'hybrid';
-try {
-  const p = new URLSearchParams(location.search);
-  const rt = (p.get('rt') || '').toLowerCase();
-  if (rt === 'poll' || rt === 'stream' || rt === 'hybrid') REALTIME_MODE = rt;
-} catch {}
+let app = null, db = null;
 
-export function setRealtimeMode(mode) {
-  if (['stream','poll','hybrid'].includes(mode)) REALTIME_MODE = mode;
-}
-export function initApp() {
-  if (db) return db;
-  const app = initializeApp(firebaseConfig);
-  // Use long polling and disable fetch streams for environments that block streaming
-  db = initializeFirestore(app, {
-    experimentalAutoDetectLongPolling: true,
-    useFetchStreams: false
-  });
-  console.log("Firebase initialized");
+export function initApp(){
+  if(db) return db;
+  app = initializeApp(firebaseConfig);
+  db = getFirestore(app);
+  console.log("Firebase initialized (modular v12)");
   return db;
 }
 
-export function generateRefID(type = "X", city = "D") {
+/* Type & status helpers for UI */
+export function fullTypeName(code){
+  return {
+    P: "Plastic",
+    A: "Paper",
+    M: "Metal",
+    G: "Glass",
+    E: "E-waste",
+    C: "Cardboard",
+    X: "Mixed"
+  }[code] || code;
+}
+
+export function fullStatusName(code){
+  return {
+    PEN: "Pending Pickup",
+    COL: "Collected by Govt Worker",
+    SCN: "Sorted at Center",
+    ASG: "Assigned to Lot",
+    FUL: "Lot Full",
+    SLD: "Sold to Company"
+  }[code] || code;
+}
+
+/* Timeline renderer (returns simple HTML) */
+export function formatTimeline(arr = []){
+  if(!Array.isArray(arr) || arr.length === 0) return `<div class="small">No timeline available</div>`;
+  return arr.map(t => `
+    <div class="timeline-step" role="listitem">
+      <div style="flex:1">
+        <b>${fullStatusName(t.code)}</b>
+        <div class="meta">${t.worker ? t.worker + ' • ' : ''}${t.lot ? 'Lot: ' + t.lot + ' • ' : ''}${new Date(t.at).toLocaleString()}</div>
+      </div>
+    </div>
+  `).join("");
+}
+
+/* Ref generator (keeps previous behaviour) */
+export function generateRefID(type = "X", city = "D"){
   const d = new Date();
-  return `${type}${city}${d.getDate().toString(36).toUpperCase()}${d.getHours().toString(36).toUpperCase()}${d.getMinutes().toString(36).toUpperCase()}${Math.random().toString(36).slice(2,6).toUpperCase()}`;
+  return (
+    type +
+    city +
+    d.getDate().toString(36).toUpperCase() +
+    d.getHours().toString(36).toUpperCase() +
+    d.getMinutes().toString(36).toUpperCase() +
+    Math.random().toString(36).slice(2, 6).toUpperCase()
+  );
 }
 
-// Seed minimal demo data — safe to run repeatedly
-export async function seedIfEmpty() {
+/* Seed demo data (idempotent) */
+export async function seedIfEmpty(){
   initApp();
-  const col = (n) => collection(db, n);
-
-  const u = await getDocs(col("users"));
-  if (u.empty) {
-    const arr = [
-      { id: "user1", name: "Anita", wallet: 0 },
-      { id: "user2", name: "Rahul", wallet: 0 },
-      { id: "user3", name: "Neha", wallet: 0 },
-      { id: "user4", name: "Sandeep", wallet: 0 },
-      { id: "user5", name: "Priya", wallet: 0 }
-    ];
-    for (const x of arr) await setDoc(doc(db, "users", x.id), x);
-    console.log("Seeded users");
-  }
-
-  const g = await getDocs(col("gov"));
-  if (g.empty) {
-    const arr = [
-      { id: "gov1", name: "Collector A" },
-      { id: "gov2", name: "Collector B" }
-    ];
-    for (const x of arr) await setDoc(doc(db, "gov", x.id), x);
-    console.log("Seeded gov");
-  }
-
-  const c = await getDocs(col("companies"));
-  if (c.empty) {
-    const arr = [
-      { id: "co1", name: "GreenRecycle" },
-      { id: "co2", name: "EcoBuyers" }
-    ];
-    for (const x of arr) await setDoc(doc(db, "companies", x.id), x);
-    console.log("Seeded companies");
-  }
-
-  const t = await getDocs(col("trucks"));
-  if (t.empty) {
-    const base = [23.7953, 86.4304];
-    for (let i = 1; i <= 5; i++) {
-      await addDoc(col("trucks"), {
-        id: `T${i}`,
-        lat: base[0] + (Math.random() - 0.5) * 0.02,
-        lon: base[1] + (Math.random() - 0.5) * 0.02,
-        updated: new Date().toISOString()
-      });
+  try {
+    // users
+    const uCol = collection(db, "users");
+    const uDocs = await getDocs(uCol);
+    if (uDocs.empty) {
+      const users = [
+        { id: "user1", name: "Anita", wallet: 0 },
+        { id: "user2", name: "Rahul", wallet: 0 },
+        { id: "user3", name: "Neha", wallet: 0 },
+        { id: "user4", name: "Sandeep", wallet: 0 },
+        { id: "user5", name: "Priya", wallet: 0 }
+      ];
+      for (const u of users) await setDoc(doc(db, "users", u.id), u);
+      console.log("common.js: seeded users");
     }
-    console.log("Seeded trucks");
-  }
 
-  // Seed demo lots for company view
-  const l = await getDocs(col("lots"));
-  if (l.empty) {
-    const arr = [
-      { id: "LOT-P-DHN-1", type: "P", city: "DHN", weight: 120, target: 500, isFull: false, bids: [] },
-      { id: "LOT-M-DHN-1", type: "M", city: "DHN", weight: 320, target: 700, isFull: false, bids: [] },
-      { id: "LOT-A-DHN-1", type: "A", city: "DHN", weight: 450, target: 900, isFull: false, bids: [] }
-    ];
-    for (const x of arr) await setDoc(doc(db, "lots", x.id), { ...x, createdAt: new Date().toISOString() });
-    console.log("Seeded lots");
+    // trucks
+    const tc = collection(db, "trucks");
+    const tDocs = await getDocs(tc);
+    if (tDocs.empty) {
+      const base = [30.737, 76.768]; // default area if you want
+      for (let i = 1; i <= 5; i++) {
+        await addDoc(tc, {
+          id: `T${i}`,
+          lat: base[0] + (Math.random() - 0.5) * 0.01,
+          lon: base[1] + (Math.random() - 0.5) * 0.01,
+          updated: new Date().toISOString()
+        });
+      }
+      console.log("common.js: seeded trucks");
+    }
+
+    // some trash sample
+    const trashCol = collection(db, "trash");
+    const trashDocs = await getDocs(trashCol);
+    if (trashDocs.empty) {
+      const samples = [
+        { ref: generateRefID("P","D"), owner:"user1", type:"P", qty:3, city:"D", status:"PEN", timeline:[{code:"PEN", at:new Date().toISOString()}], createdAt:new Date().toISOString() },
+        { ref: generateRefID("A","D"), owner:"user2", type:"A", qty:1.5, city:"D", status:"PEN", timeline:[{code:"PEN", at:new Date().toISOString()}], createdAt:new Date().toISOString() },
+        { ref: generateRefID("M","D"), owner:"user3", type:"M", qty:2.2, city:"D", status:"PEN", timeline:[{code:"PEN", at:new Date().toISOString()}], createdAt:new Date().toISOString() }
+      ];
+      for(const s of samples) await setDoc(doc(db, "trash", s.ref), s);
+      console.log("common.js: seeded trash samples");
+    }
+
+    // lots default empty (optional)
+  } catch (err) {
+    console.error("common.js: seedIfEmpty error", err);
+    throw err;
   }
 }
 
-// Lightweight real-time listener helper
-export function onRealtimeCollection(name, cb) {
+/* Realtime listener helper: callback gets array of docs */
+export function onRealtimeCollection(name, cb, onError){
   initApp();
-
-  // Primary: realtime listener
-  let lastHash = "";
-  const makeHash = (arr) => arr.map(x => x.id).join("|");
-  let unsub = null;
-  if (REALTIME_MODE !== 'poll') {
-    unsub = onSnapshot(
+  try {
+    const unsub = onSnapshot(
       collection(db, name),
-      snap => {
-        const arr = [];
-        snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
-        lastHash = makeHash(arr);
-        cb(arr);
-      },
-      err => {
-        console.error("Realtime error", name, err);
-      }
+      snap => { const arr=[]; snap.forEach(d=>arr.push({ id:d.id, ...d.data() })); cb(arr); },
+      err => { console.error(`common.js: listener ${name} error`, err); if(onError) onError(err); }
     );
+    return unsub;
+  } catch(err) {
+    console.error("common.js: onRealtimeCollection error", err);
+    throw err;
   }
-
-  // Fallback: periodic polling to ensure UI stays updated if streaming is blocked
-  const pollMs = 6000;
-  const timer = setInterval(async () => {
-    try {
-      const s = await getDocs(collection(db, name));
-      const arr = s.docs.map(d => ({ id: d.id, ...d.data() }));
-      const h = makeHash(arr);
-      if (REALTIME_MODE === 'poll' || h !== lastHash) {
-        lastHash = h;
-        cb(arr);
-      }
-    } catch (e) {
-      console.warn("Polling error", name, e?.message || e);
-    }
-  }, pollMs);
-
-  // Return unified unsubscribe
-  return () => {
-    try { unsub && unsub(); } catch {}
-    clearInterval(timer);
-  };
 }
 
-export async function getDocsFromCol(name) {
+/* Simple reads */
+export async function getUser(id){
   initApp();
-  const s = await getDocs(collection(db, name));
-  return s.docs.map(d => ({ id: d.id, ...d.data() }));
+  const d = await getDoc(doc(db, "users", id));
+  return d.exists() ? { id:d.id, ...d.data() } : null;
+}
+export async function getAll(collectionName){
+  initApp();
+  const snap = await getDocs(collection(db, collectionName));
+  return snap.docs.map(d=>({ id:d.id, ...d.data() }));
 }
 
-export async function getUser(id) {
+/* Create trash doc */
+export async function createTrash(ref, payload){
   initApp();
-  const r = await getDoc(doc(db, "users", id));
-  return r.exists() ? { id: r.id, ...r.data() } : null;
+  const dref = doc(db, "trash", ref);
+  const data = { ...payload, createdAt: (payload.createdAt || new Date().toISOString()), updatedAt: new Date().toISOString() };
+  await setDoc(dref, data);
+  return data;
 }
 
-// create a trash listing with the chosen ref (uses setDoc so id is our ref)
-export async function createTrash(ref, data) {
+/* Create a lot (admin) */
+export async function createLot({ type="X", city="D", target=500 }){
   initApp();
-  await setDoc(doc(db, "trash", ref), {
-    ...data,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+  const col = collection(db, "lots");
+  const docRef = await addDoc(col, {
+    type, city, target, weight:0, items:[], isFull:false, createdAt: new Date().toISOString(), status: "OPEN", bids:[]
   });
+  return docRef.id;
 }
 
-// utility to credit user wallet (atomic-ish single update pattern)
-export async function creditUser(userId, amount) {
+/* Assign a single trash item to a lot (updates lot and trash) */
+export async function assignToLot(lotID, trashRef){
   initApp();
-  const uRef = doc(db, "users", userId);
-  const snap = await getDoc(uRef);
-  if (!snap.exists()) {
-    throw new Error("User not found");
+  const lotRef = doc(db, "lots", lotID);
+  const lotSnap = await getDoc(lotRef);
+  if(!lotSnap.exists()) throw new Error("Lot not found");
+
+  const lot = lotSnap.data();
+  const trashRefDoc = doc(db, "trash", trashRef);
+  const trashSnap = await getDoc(trashRefDoc);
+  if(!trashSnap.exists()) throw new Error("Trash not found");
+
+  const t = trashSnap.data();
+  const newItems = [...(lot.items || []), t.ref || trashSnap.id];
+  const newWeight = (lot.weight || 0) + (t.qty || 0);
+  const isFull = newWeight >= (lot.target || 999999);
+
+  await updateDoc(lotRef, { items: newItems, weight: newWeight, isFull, status: isFull ? "FUL" : (lot.status || "OPEN") });
+
+  // update trash
+  const tl = t.timeline || [];
+  tl.push({ code: "ASG", lot: lotID, at: new Date().toISOString() });
+  await updateDoc(trashRefDoc, { status: "ASG", timeline: tl, assignedLot: lotID, updatedAt: new Date().toISOString() });
+
+  // if lot just became full, set fullAt
+  if(isFull) {
+    await updateDoc(lotRef, { fullAt: new Date().toISOString() });
   }
-  const current = snap.data().wallet || 0;
-  await setDoc(uRef, { ...snap.data(), wallet: current + amount });
+
+  return true;
 }
 
-// Update a document by reading it, mutating its data, and writing back
-export async function updateDocField(colName, id, mutateFn) {
+/* Quick metrics snapshot (counts + by type) */
+export async function metricsSnapshot(){
   initApp();
-  const ref = doc(db, colName, id);
-  const snap = await getDoc(ref);
-  const current = snap.exists() ? snap.data() : null;
-  const updated = await mutateFn(current);
-  if (updated == null) throw new Error("Mutation returned null/undefined");
-  // ensure updatedAt maintained if applicable
-  const payload = { ...updated, updatedAt: new Date().toISOString() };
-  await setDoc(ref, payload);
-  return payload;
-}
-
-// Add a new doc or set by id; returns the document id
-export async function addOrSetDoc(colName, idOrData, maybeData) {
-  initApp();
-  if (typeof idOrData === "string") {
-    const id = idOrData;
-    const data = { ...maybeData, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    await setDoc(doc(db, colName, id), data);
-    return id;
-  } else {
-    const data = { ...idOrData, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    const r = await addDoc(collection(db, colName), data);
-    return r.id;
+  const out = {};
+  const colNames = ["users","trash","lots","trucks","companies"];
+  for(const name of colNames){
+    const snap = await getDocs(collection(db, name));
+    out[name] = snap.size;
   }
+
+  // trash by type
+  const trashDocs = await getDocs(collection(db, "trash"));
+  const byType = {};
+  trashDocs.forEach(d => {
+    const t = d.data().type || "X";
+    byType[t] = (byType[t] || 0) + 1;
+  });
+  out.trashByType = byType;
+
+  return out;
 }
+
+/* simple update wrapper */
+export async function updateDocSimple(collectionName, docId, payload){
+  initApp();
+  const dref = doc(db, collectionName, docId);
+  await updateDoc(dref, { ...payload, updatedAt: new Date().toISOString() });
+  return true;
+}
+
+/* default export convenience */
+export default {
+  initApp, seedIfEmpty, onRealtimeCollection,
+  getUser, getAll, createTrash, createLot, assignToLot,
+  generateRefID, fullTypeName, fullStatusName, formatTimeline,
+  metricsSnapshot, updateDocSimple
+};

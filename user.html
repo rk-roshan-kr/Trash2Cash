@@ -1,216 +1,226 @@
 <!doctype html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://www.gstatic.com https://unpkg.com; connect-src 'self' https://firestore.googleapis.com https://www.googleapis.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https://*.tile.openstreetmap.org; font-src 'self';" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Trash2Cash — User</title>
 
-  <link rel="stylesheet" href="style.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
   <style>
-    /* small overrides for user page */
-    #map { height: 320px; border-radius: 10px; }
-    .controls .inline { width: auto; }
-    .wallet-balance { font-size: 20px; font-weight: 700; color: #ff6600; }
-    .top-actions { display:flex; gap:8px; align-items:center; justify-content:space-between; }
+    /* Amazon-style modal */
+    #modalOverlay {
+      position: fixed;
+      top:0; left:0; right:0; bottom:0;
+      background: rgba(0,0,0,0.55);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:200;
+    }
+    #modalBox {
+      background:#fff;
+      width:90%;
+      max-width:420px;
+      border-radius:12px;
+      padding:16px;
+      box-shadow:0 8px 30px rgba(0,0,0,0.25);
+      z-index: 10;
+    }
+    .timeline-step {
+      padding:8px 0;
+      border-left:3px solid var(--brand);
+      margin-left:12px;
+      padding-left:12px;
+      margin-bottom:8px;
+    }
+    #map { height:320px; border-radius:10px; z-index: 10; }
   </style>
 </head>
+
 <body>
-  <header class="topbar">
-    <div class="brand">TRASH 2 CASH — User</div>
-    <div style="display:flex;gap:10px;align-items:center">
-      <div id="userLabel" class="small"></div>
-      <a class="smalllink" href="index.html">Logout</a>
+
+<header class="topbar">
+  <div class="brand">TRASH 2 CASH — User</div>
+  <div style="padding-right:12px"><a id="logout" class="small">Logout</a></div>
+</header>
+
+<main class="page-area">
+  <div id="error" class="error" style="display:none"></div>
+
+  <!-- CREATE LISTING -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h3 style="margin:0">Create Trash Listing</h3>
+      <div id="status" class="small"></div>
     </div>
-  </header>
 
-  <main class="page-area">
-    <section class="card">
-      <div class="top-actions">
-        <div><h3>Create Trash Listing</h3></div>
-        <div id="statusMsg" class="small"></div>
-      </div>
+    <div class="row" style="margin-top:10px">
+      <select id="type">
+        <option value="P">Plastic</option>
+        <option value="A">Paper</option>
+        <option value="M">Metal</option>
+        <option value="G">Glass</option>
+        <option value="E">E-waste</option>
+      </select>
 
-      <div class="row controls" style="margin-top:8px">
-        <select id="type" class="inline">
-          <option value="P">Plastic</option>
-          <option value="A">Paper</option>
-          <option value="M">Metal</option>
-          <option value="G">Glass</option>
-        </select>
+      <input id="qty" placeholder="kg" style="width:90px"/>
+      <input id="city" placeholder="City code" style="width:100px"/>
+      <button id="create" class="primary">Create</button>
+    </div>
+  </div>
 
-        <input id="qty" placeholder="kg" style="width:90px" />
-        <input id="city" placeholder="City code" style="width:100px" />
+  <!-- WALLET -->
+  <div class="card">
+    <h3>Your Wallet</h3>
+    <div id="wallet" class="small">Loading...</div>
+  </div>
 
-        <button id="btnCreate" class="primary">Create</button>
-      </div>
+  <!-- LISTINGS -->
+  <div class="card">
+    <h3>Your Listings</h3>
+    <div id="listings">Loading...</div>
+  </div>
 
-      <div class="small hint" style="margin-top:8px">Tip: separate and label your garbage to get higher rewards.</div>
-    </section>
+  <!-- MAP -->
+  <div class="card">
+    <h3>Map — Trucks</h3>
+    <div id="map"></div>
+  </div>
+</main>
 
-    <section class="card">
-      <h3>Your Wallet</h3>
-      <div id="wallet" class="wallet-balance">Loading...</div>
-    </section>
+<!-- Amazon-style modal -->
+<div id="modalOverlay">
+  <div id="modalBox">
+    <h3>Tracking Timeline</h3>
+    <div id="modalBody"></div>
+    <button class="primary" id="closeModal" style="margin-top:15px;width:100%">Close</button>
+  </div>
+</div>
 
-    <section class="card">
-      <h3>Your Listings</h3>
-      <div id="listings">Loading...</div>
-    </section>
+<script type="module">
+import common from './common.js';
+const { 
+  initApp, seedIfEmpty, onRealtimeCollection, 
+  getUser, generateRefID, createTrash,
+  fullStatusName, formatTimeline 
+} = common;
 
-    <section class="card">
-      <h3>Map — Trucks & Sorting Units</h3>
-      <div id="map"></div>
-    </section>
+initApp();
 
-  </main>
+const userId = sessionStorage.getItem('t2c_id') || "user1";
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+/* Logout */
+document.getElementById('logout').onclick = () => {
+  sessionStorage.clear();
+  location.href = "index.html";
+};
 
-  <script type="module">
-    import {
-      initApp,
-      generateRefID,
-      seedIfEmpty,
-      onRealtimeCollection,
-      createTrash,
-      getUser,
-      getDocsFromCol
-    } from './common.js';
+const errBox = document.getElementById('error');
+function showErr(msg){ errBox.style.display='block'; errBox.textContent=msg; }
+function clearErr(){ errBox.style.display='none'; }
 
-    // Ensure firebase initialized early
-    initApp();
+/* MAIN INIT */
+(async function start(){
+  try {
+    await seedIfEmpty();
+    const me = await getUser(userId);
+    if(!me) showErr("User not found: "+userId);
 
-    const userId = sessionStorage.getItem('t2c_id');
-    if (!userId) {
-      alert('Not signed in. Redirecting to login.');
-      location.href = 'index.html';
+    /* Wallet live */
+    onRealtimeCollection("users", users=>{
+      const u = users.find(x=>x.id===userId);
+      document.getElementById("wallet").textContent =
+        u ? "₹ " + (u.wallet||0).toFixed(2) : "₹ 0.00";
+    });
+
+    /* LISTINGS live */
+    onRealtimeCollection("trash", all=>{
+      const mine = all.filter(x=>x.owner===userId).sort((a,b)=> 
+        (b.createdAt||"").localeCompare(a.createdAt||"")
+      );
+
+      document.getElementById("listings").innerHTML =
+        mine.length
+          ? mine.map(it=>`
+          <div class="list-item">
+            <b>${it.ref}</b> — ${it.type} — ${it.qty}kg — <b>${fullStatusName(it.status)}</b>
+            <br>
+            <button class="smalllink" onclick="window.showTimeline('${it.ref}')">Track Status</button>
+          </div>
+        `).join("")
+          : `<div>No listings yet</div>`;
+    });
+
+    /* MAP LIVE */
+    let map, markers = {};
+    const L = window.L;
+
+    function initMap(){
+      map = L.map('map').setView([30.741, 76.768], 15);  // CU CAMPUS
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
     }
+    initMap();
 
-    // Cache dom
-    const userLabel = document.getElementById('userLabel');
-    const walletEl = document.getElementById('wallet');
-    const listingsEl = document.getElementById('listings');
-    const statusMsg = document.getElementById('statusMsg');
-
-    const typeEl = document.getElementById('type');
-    const qtyEl = document.getElementById('qty');
-    const cityEl = document.getElementById('city');
-    const btnCreate = document.getElementById('btnCreate');
-
-    // init
-    (async function start() {
-      try {
-        await seedIfEmpty();
-
-        // show user info
-        const me = await getUser(userId);
-        userLabel.textContent = me ? `${me.id} — ${me.name}` : userId;
-
-        // attach create handler
-        btnCreate.addEventListener('click', onCreate);
-
-        // realtime: user's listings
-        onRealtimeCollection('trash', all => {
-          const mine = all.filter(x => x.owner === userId).sort((a,b)=> (b.createdAt||'').localeCompare(a.createdAt||''));
-          renderListings(mine);
-        });
-
-        // realtime: wallet/users
-        onRealtimeCollection('users', users => {
-          const meu = users.find(u => u.id === userId);
-          walletEl.textContent = meu ? `₹ ${(meu.wallet || 0).toFixed(2)}` : '₹ 0.00';
-        });
-
-        // realtime: trucks for map
-        onRealtimeCollection('trucks', trucks => {
-          // map updates handled below
-          updateTrucksOnMap(trucks);
-        });
-
-        initMap();
-      } catch (err) {
-        console.error(err);
-        statusMsg.textContent = 'Init error: ' + (err.message || err);
-      }
-    })();
-
-    // create action
-    async function onCreate() {
-      clearStatus();
-      try {
-        const t = typeEl.value || 'X';
-        const q = parseFloat(qtyEl.value) || 1;
-        const c = (cityEl.value || 'D').toUpperCase();
-        const ref = generateRefID(t, c);
-        btnCreate.disabled = true;
-        statusMsg.textContent = 'Creating...';
-
-        await createTrash(ref, {
-          ref,
-          owner: userId,
-          type: t,
-          qty: q,
-          city: c,
-          status: 'PEN',
-          timeline: [{ code: 'PEN', at: new Date().toISOString() }]
-        });
-
-        statusMsg.textContent = 'Created ' + ref;
-        qtyEl.value = '';
-        cityEl.value = '';
-
-        setTimeout(() => clearStatus(), 2500);
-      } catch (err) {
-        console.error('Create failed', err);
-        statusMsg.textContent = 'Create failed: ' + (err.message || err);
-      } finally {
-        btnCreate.disabled = false;
-      }
-    }
-
-    function renderListings(items) {
-      listingsEl.innerHTML = items.length ? items.map(it => `
-        <div class="list-item">
-          <b>${it.ref}</b> — ${it.type} — ${it.qty}kg — <b>${it.status}</b>
-          <div class="small">${(it.timeline||[]).map(x => `${x.code} @ ${new Date(x.at).toLocaleString()}`).join('<br>')}</div>
-        </div>
-      `).join('') : '<div>No listings yet</div>';
-    }
-
-    function clearStatus(){ statusMsg.textContent = ''; }
-
-    // ---------------- MAP ----------------
-    let map, truckMarkers = {};
-    function initMap() {
-      if (window.L == null) {
-        console.warn('Leaflet not loaded');
-        return;
-      }
-      map = L.map('map').setView([23.7953, 86.4304], 13);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19
-      }).addTo(map);
-    }
-
-    function updateTrucksOnMap(trucks) {
-      if (!map) initMap();
-      (trucks || []).forEach(t => {
-        if (!t.id) return;
-        if (!truckMarkers[t.id]) {
-          truckMarkers[t.id] = L.marker([t.lat, t.lon]).addTo(map).bindPopup(`${t.id}`);
+    onRealtimeCollection("trucks", trucks=>{
+      trucks.forEach(t=>{
+        if(!markers[t.id]) {
+          markers[t.id] = L.marker([t.lat, t.lon]).addTo(map).bindPopup(t.id);
         } else {
-          truckMarkers[t.id].setLatLng([t.lat, t.lon]);
+          markers[t.id].setLatLng([t.lat, t.lon]);
         }
       });
-    }
+    });
 
-    // debug helpers
-    window.__t2c = {
-      renderListings,
-      updateTrucksOnMap
+    /* CREATE LISTING */
+    document.getElementById("create").onclick = async ()=>{
+      clearErr();
+      let t = type.value;
+      let q = parseFloat(qty.value) || 1;
+      let c = (city.value || "D").toUpperCase();
+      let ref = generateRefID(t,c);
+
+      try {
+        status.textContent = "Creating...";
+        await createTrash(ref,{
+          ref, owner:userId, type:t, qty:q, city:c,
+          status:"PEN",
+          timeline:[{code:"PEN", at:new Date().toISOString()}]
+        });
+
+        status.textContent = "Created "+ref;
+        qty.value = ""; city.value = "";
+        setTimeout(()=> status.textContent="",2000);
+      }
+      catch(e){
+        showErr("Create failed: "+(e.message||e));
+      }
     };
-  </script>
+
+  } catch(e){
+    showErr("Init failed: "+(e.message||e));
+  }
+})();
+
+/* --- AMAZON STYLE MODAL --- */
+window.showTimeline = function(refId){
+  import('./common.js').then(mod=>{
+    mod.getAll("trash").then(all=>{
+      const obj = all.find(x=>x.id===refId);
+      if(!obj) return;
+
+      document.getElementById("modalBody").innerHTML = formatTimeline(obj.timeline);
+      document.getElementById("modalOverlay").style.display = "flex";
+    });
+  });
+};
+
+document.getElementById("closeModal").onclick = ()=>{
+  document.getElementById("modalOverlay").style.display = "none";
+};
+</script>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </body>
 </html>
